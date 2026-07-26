@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtuelle Python-Umgebungen
+.venv/
+venv/
+env/
+
+# Lokale Umgebungsvariablen und Zugangsdaten
+.env
+.env.*
+!.env.example
+
+# Entwicklungswerkzeuge
+.vscode/
+.idea/
+
+# Betriebssystem-Dateien
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Lokale Datenbanken und temporäre Dateien
+*.db
+*.sqlite
+*.sqlite3
+*.log
+tmp/
+temp/
