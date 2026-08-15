@@ -112,6 +112,29 @@ AWIN_HEADER: tuple[str, ...] = (
 )
 
 
+# These columns are present only in some AWIN vertical/feed configurations and
+# are not required by the current Solvory AWIN importer.
+AWIN_OPTIONAL_FIELDS: frozenset[str] = frozenset(
+    {
+        "Fashion:suitable_for",
+        "Fashion:category",
+        "Fashion:size",
+        "Fashion:material",
+        "Fashion:pattern",
+        "Fashion:swatch",
+        "ShoppingNL:energy_label",
+        "ShoppingNL:energy_label_link",
+        "ShoppingNL:energy_label_logo",
+        "ShoppingNL:google_taxonomy",
+    }
+)
+
+# Every other field from the approved 96-column reference feed is required by
+# the current parser/normalizer/import pipeline. Unknown additional AWIN fields
+# are allowed so that advertiser-specific feed extensions do not break imports.
+AWIN_REQUIRED_FIELDS: frozenset[str] = frozenset(AWIN_HEADER) - AWIN_OPTIONAL_FIELDS
+
+
 class AwinParserError(ValueError):
     """Base error for structurally invalid AWIN CSV input."""
 
@@ -125,26 +148,22 @@ class AwinRowError(AwinParserError):
 
 
 def validate_header(header: list[str] | tuple[str, ...]) -> None:
-    """Validate the exact ordered AWIN header used by the approved feed."""
+    """Validate that all fields required by the current AWIN pipeline exist.
+
+    Optional vertical-specific fields may be absent and additional unknown AWIN
+    columns are tolerated. Column order is not significant; row values are
+    mapped using the actual header supplied by the feed.
+    """
 
     actual = tuple(header)
-    if actual == AWIN_HEADER:
+    missing = sorted(AWIN_REQUIRED_FIELDS.difference(actual))
+
+    if not missing:
         return
 
-    missing = [field for field in AWIN_HEADER if field not in actual]
-    unexpected = [field for field in actual if field not in AWIN_HEADER]
-
-    details: list[str] = [
-        f"expected {len(AWIN_HEADER)} columns, received {len(actual)}"
-    ]
-    if missing:
-        details.append(f"missing: {', '.join(missing)}")
-    if unexpected:
-        details.append(f"unexpected: {', '.join(unexpected)}")
-    if not missing and not unexpected and actual != AWIN_HEADER:
-        details.append("column order differs from the approved AWIN header")
-
-    raise AwinHeaderError("Invalid AWIN CSV header (" + "; ".join(details) + ")")
+    raise AwinHeaderError(
+        "Invalid AWIN CSV header; missing required field(s): " + ", ".join(missing)
+    )
 
 
 def iter_awin_stream(stream: TextIO) -> Iterator[dict[str, str]]:
@@ -162,7 +181,7 @@ def iter_awin_stream(stream: TextIO) -> Iterator[dict[str, str]]:
         raise AwinHeaderError("AWIN CSV is empty; header row is missing") from exc
 
     validate_header(header)
-    expected_columns = len(AWIN_HEADER)
+    expected_columns = len(header)
 
     for line_number, row in enumerate(reader, start=2):
         if len(row) != expected_columns:
@@ -171,7 +190,7 @@ def iter_awin_stream(stream: TextIO) -> Iterator[dict[str, str]]:
                 f"expected {expected_columns} columns, received {len(row)}"
             )
 
-        yield dict(zip(AWIN_HEADER, row, strict=True))
+        yield dict(zip(header, row, strict=True))
 
 
 def iter_awin_rows(path: str | Path) -> Iterator[dict[str, str]]:

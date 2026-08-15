@@ -8,6 +8,8 @@ import pytest
 
 from backend.importers.awin.parser import (
     AWIN_HEADER,
+    AWIN_OPTIONAL_FIELDS,
+    AWIN_REQUIRED_FIELDS,
     AwinHeaderError,
     AwinRowError,
     iter_awin_rows,
@@ -28,7 +30,7 @@ def _csv_text(header: tuple[str, ...], rows: list[list[str]] | None = None) -> s
     return output.getvalue()
 
 
-def test_fixture_uses_approved_96_column_header() -> None:
+def test_existing_96_column_feed_header_is_accepted() -> None:
     with FIXTURE.open("r", encoding="utf-8", newline="") as stream:
         header = next(csv.reader(stream, delimiter=";"))
 
@@ -90,19 +92,48 @@ def test_long_real_feed_text_is_not_truncated() -> None:
     assert len(longest["description"]) == 3783
 
 
-def test_rejects_missing_header_column() -> None:
-    invalid_header = AWIN_HEADER[:-1]
+def test_bellerei_86_column_header_is_accepted() -> None:
+    bellerei_header = tuple(field for field in AWIN_HEADER if field not in AWIN_OPTIONAL_FIELDS)
 
-    with pytest.raises(AwinHeaderError, match="expected 96 columns, received 95"):
-        list(iter_awin_stream(StringIO(_csv_text(invalid_header))))
+    assert len(bellerei_header) == 86
+    validate_header(bellerei_header)
 
 
-def test_rejects_reordered_header() -> None:
-    invalid_header = list(AWIN_HEADER)
-    invalid_header[0], invalid_header[1] = invalid_header[1], invalid_header[0]
+def test_all_declared_optional_fields_may_be_missing() -> None:
+    header = tuple(field for field in AWIN_HEADER if field not in AWIN_OPTIONAL_FIELDS)
 
-    with pytest.raises(AwinHeaderError, match="column order differs"):
+    assert set(header) == set(AWIN_REQUIRED_FIELDS)
+    validate_header(header)
+
+
+def test_additional_unknown_columns_are_tolerated_and_mapped() -> None:
+    header = (*AWIN_HEADER, "Advertiser:future_field")
+    row = [""] * len(header)
+    row[-1] = "future value"
+
+    records = list(iter_awin_stream(StringIO(_csv_text(header, [row]))))
+
+    assert records[0]["Advertiser:future_field"] == "future value"
+
+
+def test_rejects_missing_required_header_field() -> None:
+    invalid_header = tuple(field for field in AWIN_HEADER if field != "merchant_product_id")
+
+    with pytest.raises(AwinHeaderError, match=r"missing required field\(s\): merchant_product_id"):
         validate_header(invalid_header)
+
+
+def test_reordered_required_header_is_accepted_and_values_follow_actual_header() -> None:
+    header = list(AWIN_HEADER)
+    header[0], header[1] = header[1], header[0]
+    row = [""] * len(header)
+    row[0] = "Reordered product"
+    row[1] = "https://example.test/awin"
+
+    records = list(iter_awin_stream(StringIO(_csv_text(tuple(header), [row]))))
+
+    assert records[0]["product_name"] == "Reordered product"
+    assert records[0]["aw_deep_link"] == "https://example.test/awin"
 
 
 def test_rejects_empty_file() -> None:
