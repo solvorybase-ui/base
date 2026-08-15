@@ -836,7 +836,4 @@ COMMENT ON COLUMN app_settings.setting_value IS 'Darf keine Passwörter, API-Sch
 -- FINAL SCHEMA NOTES
 -- ============================================================================
 
-COMMENT ON DATABASE CURRENT_DATABASE() IS
-    'Solvory operational PostgreSQL database. Domain states are intentionally distributed across import, scout, review, affiliate, content, publishing and automation domains; there is no global product status.';
-
 COMMIT;
