@@ -391,9 +391,14 @@ bereitgestellt. Ohne weitere Kandidaten wird keine leere Session erzeugt.
 Ein gültiger, dauerhaft nutzbarer Review-Link führt automatisch zum nächsten
 noch nicht entschiedenen Produkt. Der Link enthält einen kryptografisch
 zufälligen Zugriffstoken, der serverseitig geprüft wird und nicht im Klartext
-protokolliert werden darf. Ein klassischer Login ist für den ersten MVP nicht
-erforderlich. Die konkrete Token-Persistenz und der Hostname bleiben noch
-festzulegen.
+protokolliert oder persistiert werden darf. PostgreSQL enthält ausschließlich
+den SHA-256-Hash des vollständigen Tokens. Ein klassischer Login ist für den
+ersten MVP nicht erforderlich. Der Hostname bleibt noch festzulegen.
+
+Der Server leitet die Benutzerreferenz aus der stabilen UUID des geprüften
+Review-Link-Datensatzes als `review_link:<token_record_id>` ab. Der Browser
+darf diese Referenz nicht frei mitsenden. Ein gesetzter Widerrufszeitpunkt
+beendet den Zugriff dieses Links; ein widerrufener Token ist ungültig.
 
 Der gleiche Link kann auf mehreren Geräten verwendet werden. Die Datenbank ist
 die zentrale Wahrheit für Entscheidungen und Fortschritt. Jeder

@@ -730,6 +730,29 @@ Die genaue technische Zuordnung von Varianten zu Sessions wird vor der SQL-Model
 
 Abgeschlossene Sessions mit Reviews werden nicht gelöscht.
 
+### Review-Link-Zugriff
+
+Ein Review-Link-Datensatz stellt die stabile Zugriffsidentität für die mobile
+Review-App bereit. Er ist keine User-, Rollen- oder Login-Entität.
+
+Die minimale vorgesehene Persistenz umfasst:
+
+- `id` als nicht geheime UUID,
+- `token_hash` als eindeutigen SHA-256-Hash des vollständigen Tokens,
+- `created_at`,
+- `revoked_at` als nullable Widerrufszeitpunkt.
+
+Der Klartext-Token wird nicht persistiert. `updated_at` ist für das MVP nicht
+zwingend. Ein Datensatz ist nur nutzbar, solange `revoked_at` nicht gesetzt ist.
+Mehrere aktive Datensätze sind technisch zulässig; praktisch ist zunächst ein
+persönlicher aktiver Link vorgesehen.
+
+Die für eine menschliche Entscheidung verwendete Benutzerreferenz wird
+ausschließlich serverseitig aus der Datensatz-ID als
+`review_link:<token_record_id>` abgeleitet. Der Browser ist nicht Eigentümer
+dieser Referenz. Derselbe gültige Link repräsentiert auf mehreren Geräten
+dieselbe Review-Identität.
+
 ## 5.11 `reviews`
 
 ### Fachlicher Zweck

@@ -454,8 +454,11 @@ ist die zentrale Wahrheit für den Bearbeitungsstand. Jeder Request validiert
 Token, Session-Item und aktuellen Entscheidungsstand serverseitig. Veraltete
 oder bereits entschiedene Items dürfen nicht doppelt bewertet werden; bei
 Parallelitätskonflikten wird kontrolliert das nächste aktuelle Produkt geladen.
-Die konkrete Token-Persistenz und Locking-Architektur bleiben gesonderten
-Entscheidungen vorbehalten.
+Der Klartext-Token wird nicht persistiert. PostgreSQL speichert ausschließlich
+seinen SHA-256-Hash sowie die stabile UUID und den Erstellungs- und optionalen
+Widerrufszeitpunkt des Review-Link-Datensatzes. Die konkrete physische
+Schemaumsetzung und Locking-Architektur bleiben gesonderten Schritten
+vorbehalten.
 
 Der Product Evaluator und administrative NO-HIT-Overrides sind nicht
 Bestandteil dieser ersten Oberfläche.
@@ -887,12 +890,19 @@ Die mobile Web-App darf Review-Entscheidungen nur für autorisierte Benutzer erm
 Im ersten MVP dient ein kryptografisch zufälliger, serverseitig validierter
 Token im dauerhaft nutzbaren Review-Link als Zugriffsschlüssel; ein klassischer
 Login ist nicht erforderlich. Der Token darf nicht im Klartext protokolliert
-werden und muss perspektivisch widerrufbar oder ersetzbar sein. Eine bloß lange
-URL ohne serverseitige Prüfung ist unzulässig.
+oder persistiert werden. Gespeichert wird ausschließlich der SHA-256-Hash des
+vollständigen Tokens. Ein Widerrufszeitpunkt deaktiviert den zugehörigen Link;
+eine bloß lange URL ohne serverseitige Prüfung ist unzulässig.
+
+Jeder Review-Link besitzt eine nicht geheime interne UUID. Aus ihr erzeugt der
+Server die Benutzerreferenz `review_link:<token_record_id>` und übergibt sie an
+den Human Review Decision Service. Der Browser darf diese Referenz nicht frei
+bestimmen. Derselbe gültige Link kann auf mehreren Geräten dieselbe
+Review-Identität repräsentieren.
 
 Zu klären sind:
 
-- konkrete Token-Persistenz und -Verwaltung,
+- konkrete physische Schemaumsetzung und betriebliche Token-Verwaltung,
 - Hostname und Bereitstellung des Review-Links,
 - Schutz vor unbeabsichtigten Mehrfachaktionen,
 - Auditierbarkeit von Entscheidungen.
@@ -1011,8 +1021,8 @@ Ohne strukturierte Validierung können KI-Ausgaben unvollständig, widersprüchl
 - Welche Laufzeitplattform hostet Python-Backend und Worker?
 - Wird n8n im MVP eingesetzt?
 - Welche Prozesse werden synchron und welche asynchron ausgeführt?
-- Wie werden die serverseitig validierten Review-Link-Tokens konkret
-  persistiert, widerrufen und ersetzt?
+- Wie werden Review-Link-Tokens betrieblich erzeugt, ausgegeben, widerrufen und
+  ersetzt?
 - Welche Rollen und Datenbankrechte werden benötigt?
 - Wie werden Secrets verwaltet?
 - Welche Umgebungen werden eingerichtet?
