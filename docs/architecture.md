@@ -425,14 +425,24 @@ Der konkrete Einsatz von n8n im MVP ist noch nicht abschließend entschieden.
 
 Die mobile Web-App dient der menschlichen Produktreview.
 
+Die erste MVP-Review-App wird mobile-first mit FastAPI und serverseitig
+gerendertem HTML im bestehenden Python-Backend umgesetzt. Sie ist keine
+separate SPA und verwendet weder React noch Next.js. Dafür wird keine neue
+Microservice-Architektur eingeführt.
+
 Sie soll mindestens ermöglichen:
 
 - Anzeige von Review-Sessions,
 - Anzeige relevanter Produktinformationen,
+- Anzeige des Fortschritts innerhalb einer standardmäßig 20 Produkte
+  umfassenden Review-Session,
 - HIT-Entscheidung,
 - NO-HIT-Entscheidung,
 - SPÄTER-Entscheidung,
-- gegebenenfalls Anzeige von Product-Evaluator-Ergebnissen.
+- automatischer Wechsel zum nächsten Produkt nach erfolgreicher Entscheidung.
+
+Der Product Evaluator und administrative NO-HIT-Overrides sind nicht
+Bestandteil dieser ersten Oberfläche.
 
 ### Architekturgrenze
 
@@ -446,7 +456,10 @@ Sie soll nicht eigenständig:
 - Affiliate-Daten erzeugen,
 - Content veröffentlichen.
 
-Sie ruft dafür klar getrennte Anwendungsfunktionen auf oder arbeitet über noch zu definierende Backend-Schnittstellen.
+HTTP-Routen und Templates verwenden dafür die bestehenden Review Candidate-,
+Review Session- und Human Review Decision Services. Sie duplizieren keine
+Eligibility- oder Decision-Logik und führen keine direkten SQL-Schreibzugriffe
+aus.
 
 ## 5.7 Pinterest
 
@@ -766,6 +779,9 @@ Die mobile Web-App zeigt Daten an und erfasst Benutzeraktionen.
 
 Sie ist nicht die führende Instanz für fachliche Regeln.
 
+Im MVP wird sie als serverseitig gerenderte FastAPI-Oberfläche innerhalb des
+bestehenden Python-Backends umgesetzt.
+
 ## 8.5 Integrationen
 
 Externe Integrationen verbinden Solvory mit:
@@ -967,7 +983,6 @@ Ohne strukturierte Validierung können KI-Ausgaben unvollständig, widersprüchl
 ## 15. Offene Entscheidungen
 
 - Welche Laufzeitplattform hostet Python-Backend und Worker?
-- Welche Komponente stellt die Backend-Schnittstellen für die mobile Web-App bereit?
 - Wird n8n im MVP eingesetzt?
 - Welche Prozesse werden synchron und welche asynchron ausgeführt?
 - Welche Authentifizierung verwendet die mobile Web-App?

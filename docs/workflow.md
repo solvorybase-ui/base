@@ -378,9 +378,8 @@ Die genauen Sperr- und Wiederholungsregeln sind noch festzulegen.
 
 ### 9.5 Session-Größe
 
-Die bisherige Arbeitsweise verwendet Review-Sessions mit einer begrenzten Produktzahl.
-
-Die verbindliche Größe für die mobile Web-App ist noch nicht abschließend beschlossen.
+Eine Review-Session enthält standardmäßig 20 Produkte. Sind weniger
+reviewfähige Produkte verfügbar, darf eine kleinere Session erzeugt werden.
 
 ### 9.6 Fehlerpfade
 
@@ -442,6 +441,18 @@ Der Nutzer trifft die endgültige interne Produktauswahl.
 **Human Review**
 
 Die Entscheidung selbst wird durch den Nutzer getroffen.
+
+Die erste Review-Oberfläche wird mobile-first mit FastAPI und serverseitig
+gerendertem HTML im bestehenden Python-Backend umgesetzt. Sie verwendet die
+bestehenden Review-Backend-Services als fachliche Quelle und enthält keine
+eigene Eligibility- oder Decision-Logik. React, Next.js und eine separate SPA
+sind nicht Bestandteil dieses MVP-Schritts.
+
+Die Oberfläche zeigt ein Produkt je Schritt mit den vorhandenen Produkt-,
+Scout-, Bild-, Angebots- und Shopinformationen sowie den Sessionfortschritt.
+Nach einer menschlichen Entscheidung HIT, NO HIT oder SPÄTER wird das nächste
+Produkt angezeigt. Der Product Evaluator und administrative NO-HIT-Overrides
+sind nicht Bestandteil dieser ersten Oberfläche.
 
 ### 11.3 Mögliche Entscheidungen
 
@@ -761,7 +772,6 @@ Unklare Fälle sollen einen erkennbaren Klärungsstatus erhalten, statt stillsch
 - Konkrete Normalisierungsregeln.
 - Konkrete Dublettenregeln.
 - Behandlung shopübergreifend identischer Produkte.
-- Verbindliche Review-Session-Größe.
 - Regeln für gleichzeitige Session-Zuordnung.
 - Auslöselogik des Product Evaluators.
 - Pflichtbegründungen bei HIT, NO HIT oder SPÄTER.
