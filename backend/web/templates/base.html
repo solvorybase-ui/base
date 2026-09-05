@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>{% block title %}Solvory Review{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/review.css') }}">
+</head>
+<body>
+  <header class="site-header">
+    <span class="brand">Solvory</span>
+    <span class="section">Product Review</span>
+  </header>
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

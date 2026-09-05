@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ item.variant_name }} · Solvory Review{% endblock %}
+{% block content %}
+<section class="progress" aria-label="Fortschritt">
+  Produkt {{ item.position }} / {{ session.item_count }}
+</section>
+
+<article class="product-card">
+  {% if item.image_urls %}
+  <div class="gallery">
+    <img class="hero" src="{{ item.image_urls[0] }}" alt="{{ item.variant_name }}">
+    {% if item.image_urls|length > 1 %}
+    <div class="thumbnails">
+      {% for image_url in item.image_urls[1:] %}
+      <img src="{{ image_url }}" alt="Weitere Ansicht von {{ item.variant_name }}" loading="lazy">
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="image-placeholder">Kein Produktbild verfügbar</div>
+  {% endif %}
+
+  <div class="product-body">
+    <p class="eyebrow">{{ item.brand_name or "Marke nicht angegeben" }}</p>
+    <h1>{{ item.variant_name }}</h1>
+    {% if item.family_name != item.variant_name %}
+    <p class="family">{{ item.family_name }}</p>
+    {% endif %}
+    <p class="category">{{ item.category or "Kategorie nicht angegeben" }}</p>
+
+    {% if item.description %}
+    <section>
+      <h2>Beschreibung</h2>
+      <p class="long-text">{{ item.description }}</p>
+    </section>
+    {% endif %}
+
+    <section class="scout-reason">
+      <h2>Warum der Scout das Produkt vorlegt</h2>
+      <p>{{ item.scout_reason }}</p>
+    </section>
+
+    <section class="offer">
+      <h2>Angebot</h2>
+      {% if item.shop_name %}
+      <dl>
+        <div><dt>Shop</dt><dd>{{ item.shop_name }}</dd></div>
+        {% if item.offer_name %}<div><dt>Angebot</dt><dd>{{ item.offer_name }}</dd></div>{% endif %}
+        <div><dt>Preis</dt><dd>{% if item.price is not none %}{{ item.price }} {{ item.currency or "" }}{% else %}Nicht angegeben{% endif %}</dd></div>
+        <div><dt>Verfügbarkeit</dt><dd>{{ item.availability or "Unbekannt" }}</dd></div>
+      </dl>
+      {% if item.product_url %}
+      <a class="product-link" href="{{ item.product_url }}" target="_blank" rel="noopener noreferrer">Produkt beim Shop öffnen</a>
+      {% endif %}
+      {% else %}
+      <p>Keine Angebotsinformationen verfügbar.</p>
+      {% endif %}
+    </section>
+  </div>
+</article>
+
+<form class="decision-bar" method="post" action="/r/{{ request.path_params.token }}/decision">
+  <input type="hidden" name="review_session_item_id" value="{{ item.review_session_item_id }}">
+  <button class="decision hit" type="submit" name="decision" value="hit">HIT</button>
+  <button class="decision no-hit" type="submit" name="decision" value="no_hit">NO HIT</button>
+  <button class="decision later" type="submit" name="decision" value="later">SPÄTER</button>
+</form>
+{% endblock %}
