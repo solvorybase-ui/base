@@ -381,7 +381,28 @@ Die genauen Sperr- und Wiederholungsregeln sind noch festzulegen.
 Eine Review-Session enthält standardmäßig 20 Produkte. Sind weniger
 reviewfähige Produkte verfügbar, darf eine kleinere Session erzeugt werden.
 
-### 9.6 Fehlerpfade
+Die Session ist eine interne organisatorische Einheit. Der Nutzer navigiert
+nicht primär über Session-IDs. Ist eine offene Session vollständig bearbeitet
+und sind weitere Kandidaten vorhanden, wird nahtlos die nächste Session
+bereitgestellt. Ohne weitere Kandidaten wird keine leere Session erzeugt.
+
+### 9.6 Kontinuierlicher Review-Fluss
+
+Ein gültiger, dauerhaft nutzbarer Review-Link führt automatisch zum nächsten
+noch nicht entschiedenen Produkt. Der Link enthält einen kryptografisch
+zufälligen Zugriffstoken, der serverseitig geprüft wird und nicht im Klartext
+protokolliert werden darf. Ein klassischer Login ist für den ersten MVP nicht
+erforderlich. Die konkrete Token-Persistenz und der Hostname bleiben noch
+festzulegen.
+
+Der gleiche Link kann auf mehreren Geräten verwendet werden. Die Datenbank ist
+die zentrale Wahrheit für Entscheidungen und Fortschritt. Jeder
+Entscheidungsrequest muss den aktuellen serverseitigen Zustand berücksichtigen.
+Veraltete oder bereits entschiedene Items dürfen nicht still doppelt bewertet
+werden. Bei einem Parallelitätskonflikt wird das nächste aktuell offene Produkt
+geladen.
+
+### 9.7 Fehlerpfade
 
 - Nicht genügend diverse Produkte verfügbar.
 - Zu viele ähnliche Produkte warten auf Review.
@@ -453,6 +474,19 @@ Scout-, Bild-, Angebots- und Shopinformationen sowie den Sessionfortschritt.
 Nach einer menschlichen Entscheidung HIT, NO HIT oder SPÄTER wird das nächste
 Produkt angezeigt. Der Product Evaluator und administrative NO-HIT-Overrides
 sind nicht Bestandteil dieser ersten Oberfläche.
+
+Der Nutzer öffnet die Oberfläche über den serverseitig validierten
+tokenbasierten Review-Link. Interne 20er-Sessions werden vorhandenenfalls
+weitergeführt und bei vollständiger Bearbeitung nahtlos durch eine weitere
+Session abgelöst. Der Nutzer muss weder eine Session-ID kennen noch manuell
+zwischen Sessions wechseln.
+
+Der Review-Fluss endet vorläufig in einer verständlichen Fertigansicht, wenn
+keine reviewfähigen Kandidaten vorhanden sind. Eine spätere Folgepipeline kann
+bestätigte HIT-Entscheidungen in weitere Solvory-Verarbeitung,
+Content-Erstellung, Posts und Assets, Veröffentlichung und Performance-Analyse
+überführen. Diese Folgepipeline ist ausdrücklich nicht Bestandteil des
+aktuellen Review-UI-MVP.
 
 ### 11.3 Mögliche Entscheidungen
 

@@ -432,14 +432,30 @@ Microservice-Architektur eingeführt.
 
 Sie soll mindestens ermöglichen:
 
-- Anzeige von Review-Sessions,
+- Zugriff über einen dauerhaft nutzbaren, schwer erratbaren Link mit
+  serverseitig validiertem kryptografisch zufälligem Token,
 - Anzeige relevanter Produktinformationen,
-- Anzeige des Fortschritts innerhalb einer standardmäßig 20 Produkte
-  umfassenden Review-Session,
+- Anzeige des nächsten noch nicht entschiedenen Produkts,
+- kontinuierlichen Review-Fluss über interne Sessiongrenzen hinweg,
 - HIT-Entscheidung,
 - NO-HIT-Entscheidung,
 - SPÄTER-Entscheidung,
 - automatischer Wechsel zum nächsten Produkt nach erfolgreicher Entscheidung.
+
+Review-Sessions mit standardmäßig 20 Produkten und ihre IDs bleiben interne
+organisatorische Einheiten. Sie sind nicht der primäre Navigationsweg. Ist eine
+offene Session vollständig bearbeitet, stellt die Anwendung bei vorhandenen
+reviewfähigen Kandidaten nahtlos die nächste Session bereit. Ohne Kandidaten
+wird keine leere Session erzeugt, sondern eine verständliche Fertigansicht
+angezeigt.
+
+Der gleiche gültige Review-Link ist auf mehreren Geräten nutzbar. PostgreSQL
+ist die zentrale Wahrheit für den Bearbeitungsstand. Jeder Request validiert
+Token, Session-Item und aktuellen Entscheidungsstand serverseitig. Veraltete
+oder bereits entschiedene Items dürfen nicht doppelt bewertet werden; bei
+Parallelitätskonflikten wird kontrolliert das nächste aktuelle Produkt geladen.
+Die konkrete Token-Persistenz und Locking-Architektur bleiben gesonderten
+Entscheidungen vorbehalten.
 
 Der Product Evaluator und administrative NO-HIT-Overrides sind nicht
 Bestandteil dieser ersten Oberfläche.
@@ -782,6 +798,11 @@ Sie ist nicht die führende Instanz für fachliche Regeln.
 Im MVP wird sie als serverseitig gerenderte FastAPI-Oberfläche innerhalb des
 bestehenden Python-Backends umgesetzt.
 
+Der primäre Einstieg erfolgt über einen serverseitig validierten tokenbasierten
+Review-Link und nicht über eine dem Nutzer bekannte Session-ID. Fachlicher
+Fortschritt wird ausschließlich aus dem zentralen Datenbankzustand abgeleitet,
+nicht aus lokalem Browserzustand.
+
 ## 8.5 Integrationen
 
 Externe Integrationen verbinden Solvory mit:
@@ -863,11 +884,16 @@ Der konkrete Secret-Management-Dienst ist noch nicht entschieden.
 
 Die mobile Web-App darf Review-Entscheidungen nur für autorisierte Benutzer ermöglichen.
 
+Im ersten MVP dient ein kryptografisch zufälliger, serverseitig validierter
+Token im dauerhaft nutzbaren Review-Link als Zugriffsschlüssel; ein klassischer
+Login ist nicht erforderlich. Der Token darf nicht im Klartext protokolliert
+werden und muss perspektivisch widerrufbar oder ersetzbar sein. Eine bloß lange
+URL ohne serverseitige Prüfung ist unzulässig.
+
 Zu klären sind:
 
-- Authentifizierungsverfahren,
-- Rollenmodell,
-- Session-Schutz,
+- konkrete Token-Persistenz und -Verwaltung,
+- Hostname und Bereitstellung des Review-Links,
 - Schutz vor unbeabsichtigten Mehrfachaktionen,
 - Auditierbarkeit von Entscheidungen.
 
@@ -985,7 +1011,8 @@ Ohne strukturierte Validierung können KI-Ausgaben unvollständig, widersprüchl
 - Welche Laufzeitplattform hostet Python-Backend und Worker?
 - Wird n8n im MVP eingesetzt?
 - Welche Prozesse werden synchron und welche asynchron ausgeführt?
-- Welche Authentifizierung verwendet die mobile Web-App?
+- Wie werden die serverseitig validierten Review-Link-Tokens konkret
+  persistiert, widerrufen und ersetzt?
 - Welche Rollen und Datenbankrechte werden benötigt?
 - Wie werden Secrets verwaltet?
 - Welche Umgebungen werden eingerichtet?
