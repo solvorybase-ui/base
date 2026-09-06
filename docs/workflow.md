@@ -388,17 +388,35 @@ bereitgestellt. Ohne weitere Kandidaten wird keine leere Session erzeugt.
 
 ### 9.6 Kontinuierlicher Review-Fluss
 
-Ein gültiger, dauerhaft nutzbarer Review-Link führt automatisch zum nächsten
-noch nicht entschiedenen Produkt. Der Link enthält einen kryptografisch
-zufälligen Zugriffstoken, der serverseitig geprüft wird und nicht im Klartext
-protokolliert oder persistiert werden darf. PostgreSQL enthält ausschließlich
-den SHA-256-Hash des vollständigen Tokens. Ein klassischer Login ist für den
-ersten MVP nicht erforderlich. Der Hostname bleibt noch festzulegen.
+Ein gültiger, dauerhaft nutzbarer Review-Link nach dem Prinzip
+`https://<review-host>/#<token>` führt automatisch zum nächsten noch nicht
+entschiedenen Produkt. Der kryptografisch zufällige Zugriffstoken steht nur im
+URL-Fragment und wird deshalb nicht an Server, Proxy oder Hosting-Edge
+übertragen. Eine öffentliche Bootstrap-Seite liest ihn lokal aus und sendet
+ihn ausschließlich im Body eines HTTPS-Requests an `POST /review/access`.
 
-Der Server leitet die Benutzerreferenz aus der stabilen UUID des geprüften
-Review-Link-Datensatzes als `review_link:<token_record_id>` ab. Der Browser
-darf diese Referenz nicht frei mitsenden. Ein gesetzter Widerrufszeitpunkt
-beendet den Zugriff dieses Links; ein widerrufener Token ist ungültig.
+Der Server prüft den SHA-256-Hash und `revoked_at`, erzeugt bei Erfolg einen
+kryptografisch signierten Cookie-Kontext und veranlasst, dass das Fragment aus
+der Browser-URL entfernt wird. Die anschließende Navigation erfolgt tokenfrei,
+beispielsweise über `GET /review` und `POST /review/decision`. Der Cookie ist
+Host-only, `HttpOnly`, im öffentlichen HTTPS-Betrieb `Secure` und verwendet
+`SameSite=Strict`. Sein Signierschlüssel kommt ausschließlich aus einem
+Environment Secret. PostgreSQL enthält weiterhin nur den SHA-256-Hash des
+vollständigen Tokens. Ein klassischer Login ist für den ersten MVP nicht
+erforderlich. Der Hostname bleibt noch festzulegen.
+
+Der Server prüft bei jedem fachlichen Request die Cookie-Signatur und den
+aktuellen Widerrufsstatus. Anschließend leitet er die Benutzerreferenz aus der
+stabilen UUID des geprüften Review-Link-Datensatzes als
+`review_link:<token_record_id>` ab. Der Browser darf diese Referenz nicht frei
+mitsenden. Ein gesetzter Widerrufszeitpunkt beendet auch bereits erzeugte
+Cookie-Kontexte; ein widerrufener Token ist ungültig.
+
+Zustandsändernde Requests werden zusätzlich durch `SameSite=Strict` und eine
+exakte serverseitige Origin-Prüfung gegen den konfigurierten kanonischen
+HTTPS-Review-Origin geschützt. Fehlende oder abweichende Origin-Angaben werden
+abgelehnt. Tokenwerte und Bootstrap-Request-Bodies dürfen nicht protokolliert
+werden.
 
 Der gleiche Link kann auf mehreren Geräten verwendet werden. Die Datenbank ist
 die zentrale Wahrheit für Entscheidungen und Fortschritt. Jeder
@@ -480,11 +498,13 @@ Nach einer menschlichen Entscheidung HIT, NO HIT oder SPÄTER wird das nächste
 Produkt angezeigt. Der Product Evaluator und administrative NO-HIT-Overrides
 sind nicht Bestandteil dieser ersten Oberfläche.
 
-Der Nutzer öffnet die Oberfläche über den serverseitig validierten
-tokenbasierten Review-Link. Interne 20er-Sessions werden vorhandenenfalls
-weitergeführt und bei vollständiger Bearbeitung nahtlos durch eine weitere
-Session abgelöst. Der Nutzer muss weder eine Session-ID kennen noch manuell
-zwischen Sessions wechseln.
+Der Nutzer öffnet die Oberfläche über den fragmentbasierten Review-Link. Nach
+dem serverseitig validierten HTTPS-Bootstrap läuft die Review-Navigation mit
+einem sicheren Cookie-Kontext und ohne geheimen Token in Pfad oder Querystring.
+Interne 20er-Sessions werden vorhandenenfalls weitergeführt und bei
+vollständiger Bearbeitung nahtlos durch eine weitere Session abgelöst. Der
+Nutzer muss weder eine Session-ID kennen noch manuell zwischen Sessions
+wechseln.
 
 Der Review-Fluss endet vorläufig in einer verständlichen Fertigansicht, wenn
 keine reviewfähigen Kandidaten vorhanden sind. Eine spätere Folgepipeline kann

@@ -432,7 +432,7 @@ Microservice-Architektur eingeführt.
 
 Sie soll mindestens ermöglichen:
 
-- Zugriff über einen dauerhaft nutzbaren, schwer erratbaren Link mit
+- Zugriff über einen dauerhaft nutzbaren, schwer erratbaren Fragment-Link mit
   serverseitig validiertem kryptografisch zufälligem Token,
 - Anzeige relevanter Produktinformationen,
 - Anzeige des nächsten noch nicht entschiedenen Produkts,
@@ -449,16 +449,22 @@ reviewfähigen Kandidaten nahtlos die nächste Session bereit. Ohne Kandidaten
 wird keine leere Session erzeugt, sondern eine verständliche Fertigansicht
 angezeigt.
 
-Der gleiche gültige Review-Link ist auf mehreren Geräten nutzbar. PostgreSQL
-ist die zentrale Wahrheit für den Bearbeitungsstand. Jeder Request validiert
-Token, Session-Item und aktuellen Entscheidungsstand serverseitig. Veraltete
-oder bereits entschiedene Items dürfen nicht doppelt bewertet werden; bei
+Der gleiche gültige Review-Link nach dem Prinzip
+`https://<review-host>/#<token>` ist auf mehreren Geräten nutzbar. Das Fragment
+wird nicht an Server oder Hosting-Edge übertragen. Eine öffentliche Seite
+sendet den lokal gelesenen Token ausschließlich per HTTPS-POST-Body an den
+Bootstrap-Endpunkt. Nach erfolgreicher Prüfung wird das Fragment entfernt;
+die weitere Navigation verwendet tokenfreie Review-Routen und einen
+kryptografisch signierten, serverseitig verifizierten Cookie-Kontext.
+
+PostgreSQL ist die zentrale Wahrheit für den Bearbeitungsstand. Jeder
+fachliche Request validiert Cookie-Signatur, aktiven Review-Link, Session-Item
+und aktuellen Entscheidungsstand serverseitig. Veraltete oder bereits
+entschiedene Items dürfen nicht doppelt bewertet werden; bei
 Parallelitätskonflikten wird kontrolliert das nächste aktuelle Produkt geladen.
 Der Klartext-Token wird nicht persistiert. PostgreSQL speichert ausschließlich
 seinen SHA-256-Hash sowie die stabile UUID und den Erstellungs- und optionalen
-Widerrufszeitpunkt des Review-Link-Datensatzes. Die konkrete physische
-Schemaumsetzung und Locking-Architektur bleiben gesonderten Schritten
-vorbehalten.
+Widerrufszeitpunkt des Review-Link-Datensatzes.
 
 Der Product Evaluator und administrative NO-HIT-Overrides sind nicht
 Bestandteil dieser ersten Oberfläche.
@@ -801,10 +807,11 @@ Sie ist nicht die führende Instanz für fachliche Regeln.
 Im MVP wird sie als serverseitig gerenderte FastAPI-Oberfläche innerhalb des
 bestehenden Python-Backends umgesetzt.
 
-Der primäre Einstieg erfolgt über einen serverseitig validierten tokenbasierten
-Review-Link und nicht über eine dem Nutzer bekannte Session-ID. Fachlicher
-Fortschritt wird ausschließlich aus dem zentralen Datenbankzustand abgeleitet,
-nicht aus lokalem Browserzustand.
+Der primäre Einstieg erfolgt über einen fragmentbasierten geheimen Review-Link
+und einen serverseitig validierten HTTPS-Bootstrap, nicht über eine dem Nutzer
+bekannte Session-ID. Nach dem Bootstrap enthalten die Review-Routen keinen
+geheimen Token. Fachlicher Fortschritt wird ausschließlich aus dem zentralen
+Datenbankzustand abgeleitet, nicht aus lokalem Browserzustand.
 
 ## 8.5 Integrationen
 
@@ -888,21 +895,33 @@ Der konkrete Secret-Management-Dienst ist noch nicht entschieden.
 Die mobile Web-App darf Review-Entscheidungen nur für autorisierte Benutzer ermöglichen.
 
 Im ersten MVP dient ein kryptografisch zufälliger, serverseitig validierter
-Token im dauerhaft nutzbaren Review-Link als Zugriffsschlüssel; ein klassischer
-Login ist nicht erforderlich. Der Token darf nicht im Klartext protokolliert
-oder persistiert werden. Gespeichert wird ausschließlich der SHA-256-Hash des
-vollständigen Tokens. Ein Widerrufszeitpunkt deaktiviert den zugehörigen Link;
-eine bloß lange URL ohne serverseitige Prüfung ist unzulässig.
+Token im URL-Fragment eines dauerhaft nutzbaren Review-Links als initialer
+Zugriffsschlüssel; ein klassischer Login ist nicht erforderlich. Das Fragment
+wird nicht an Server oder Hosting-Edge gesendet. Der Browser übermittelt den
+Token ausschließlich per HTTPS-POST-Body an den Bootstrap-Endpunkt und entfernt
+ihn danach aus der URL. Normale Review-Requests enthalten den Token weder im
+Pfad noch im Querystring.
 
-Jeder Review-Link besitzt eine nicht geheime interne UUID. Aus ihr erzeugt der
-Server die Benutzerreferenz `review_link:<token_record_id>` und übergibt sie an
-den Human Review Decision Service. Der Browser darf diese Referenz nicht frei
-bestimmen. Derselbe gültige Link kann auf mehreren Geräten dieselbe
-Review-Identität repräsentieren.
+Nach erfolgreichem Bootstrap verwendet die App einen kryptografisch signierten,
+serverseitig verifizierten Host-only-Cookie mit `HttpOnly`, `Secure` im
+öffentlichen HTTPS-Betrieb und `SameSite=Strict`. Der Signierschlüssel wird
+ausschließlich als Environment Secret bereitgestellt. Zustandsändernde
+Requests erfordern zusätzlich eine exakte Origin-Prüfung gegen den
+konfigurierten kanonischen HTTPS-Review-Origin. Der Token darf nicht im
+Klartext protokolliert oder persistiert werden. Gespeichert wird ausschließlich
+der SHA-256-Hash des vollständigen Tokens. Ein Widerrufszeitpunkt deaktiviert
+den zugehörigen Link und damit auch bestehende Cookie-Kontexte.
+
+Jeder Review-Link besitzt eine nicht geheime interne UUID. Nach Prüfung der
+Cookie-Signatur und des aktuellen Widerrufsstatus erzeugt der Server daraus die
+Benutzerreferenz `review_link:<token_record_id>` und übergibt sie an den Human
+Review Decision Service. Der Browser darf diese Referenz nicht frei bestimmen.
+Derselbe gültige Fragment-Link kann auf mehreren Geräten jeweils einen eigenen
+Cookie-Kontext für dieselbe Review-Identität erzeugen.
 
 Zu klären sind:
 
-- konkrete physische Schemaumsetzung und betriebliche Token-Verwaltung,
+- betriebliche Token- und Signierschlüsselverwaltung,
 - Hostname und Bereitstellung des Review-Links,
 - Schutz vor unbeabsichtigten Mehrfachaktionen,
 - Auditierbarkeit von Entscheidungen.

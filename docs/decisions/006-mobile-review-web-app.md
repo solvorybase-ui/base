@@ -34,13 +34,21 @@ keine parallele Eligibility- oder Decision-Logik. Templates und Routen führen
 keine direkten SQL-Schreiboperationen aus.
 
 Der Nutzer öffnet die Review-App über einen dauerhaft nutzbaren, schwer
-erratbaren Link mit kryptografisch zufälligem Zugriffstoken. Ein klassischer
-Login ist für diesen MVP nicht vorgesehen. Der Link ist nur zusammen mit einer
-serverseitigen Tokenprüfung gültig; eine lange, ungeprüfte URL genügt nicht.
-Der Token darf nicht im Klartext protokolliert werden und soll später
-widerrufbar beziehungsweise ersetzbar sein. Hostname sowie konkrete
-Token-Persistenz und -Verwaltung werden mit dieser Entscheidung noch nicht
-festgelegt.
+erratbaren Link mit kryptografisch zufälligem Zugriffstoken im URL-Fragment
+nach dem Prinzip `https://<review-host>/#<token>`. Ein klassischer Login ist
+für diesen MVP nicht vorgesehen. Der Fragment-Token wird nicht im HTTP-Pfad
+oder Querystring übertragen. Eine öffentliche Bootstrap-Seite liest ihn lokal
+im Browser aus und sendet ihn ausschließlich im Body eines HTTPS-Requests zur
+serverseitigen Prüfung. Nach erfolgreicher Prüfung wird das Fragment entfernt
+und die weitere Review-Navigation erfolgt über tokenfreie URLs.
+
+Der Server richtet dafür einen kryptografisch signierten, serverseitig
+verifizierten Cookie-Kontext ein. Dieser enthält niemals den Review-Token und
+ist mit `HttpOnly`, `Secure` im öffentlichen HTTPS-Betrieb und
+`SameSite=Strict` geschützt. Die zugrundeliegende Review-Link-UUID und ihr
+Widerrufsstatus werden bei fachlichen Requests serverseitig erneut geprüft.
+Zustandsändernde Requests erfordern zusätzlich eine exakte Origin-Prüfung.
+Details des Zugriffs- und CSRF-Modells legt ADR 007 fest.
 
 Eine Review-Session enthält intern standardmäßig 20 Produkte. Session-ID und
 Sessiongrenzen sind organisatorische Details und kein primärer Navigationsweg
@@ -61,7 +69,9 @@ Review-Fluss ohne Kenntnis oder manuellen Wechsel einer Session-ID fortsetzen.
 Sind keine Kandidaten vorhanden, zeigt die App eine verständliche Leer- oder
 Fertigansicht und erzeugt keine leere Session.
 
-Der gleiche gültige Review-Link kann auf mehreren Geräten verwendet werden.
+Der gleiche gültige Fragment-Link kann auf mehreren Geräten verwendet werden.
+Jedes Gerät erhält nach erfolgreichem Bootstrap einen eigenen sicheren
+Cookie-Kontext, der dieselbe serverseitige Review-Identität repräsentiert.
 PostgreSQL bleibt die zentrale fachliche Wahrheit; lokaler Browserzustand ist
 nicht maßgeblich. Entscheidungen werden bei jedem Request serverseitig gegen
 den aktuellen Zustand validiert. Bereits entschiedene oder veraltete
@@ -86,8 +96,8 @@ Review-Oberfläche.
 - Interne 20er-Sessions bleiben erhalten, unterbrechen aber nicht den
   kontinuierlichen Nutzerfluss.
 - Mehrere Geräte teilen denselben serverseitigen Review-Zustand.
-- Konkrete Token-Persistenz, Hostname, Hosting und Gestaltung werden separat
-  entschieden beziehungsweise umgesetzt.
+- Hostname, Hosting und Gestaltung werden separat entschieden beziehungsweise
+  umgesetzt; Token-Bootstrap und Zugriffskontext sind in ADR 007 festgelegt.
 - HIT-Entscheidungen können später an Content-Erstellung, Posts und Assets,
   Veröffentlichung und Performance-Analyse angeschlossen werden. Diese
   Folgepipeline ist nicht Bestandteil des aktuellen UI-MVP.
@@ -101,5 +111,6 @@ Review-Oberfläche.
 - Session-ID-Navigation als primärer Nutzerfluss.
 - Ausschließlich lokaler Browserzustand als fachliche Wahrheit.
 - Ungeprüfte lange URL ohne serverseitige Tokenvalidierung.
+- Geheimer Token im HTTP-Pfad oder Querystring.
 - Fachliche Review-Logik in Templates oder HTTP-Routen.
 - Automatisierte HIT-, NO-HIT- oder SPÄTER-Entscheidungen.

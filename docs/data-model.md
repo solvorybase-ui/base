@@ -747,6 +747,14 @@ zwingend. Ein Datensatz ist nur nutzbar, solange `revoked_at` nicht gesetzt ist.
 Mehrere aktive Datensätze sind technisch zulässig; praktisch ist zunächst ein
 persönlicher aktiver Link vorgesehen.
 
+Der Klartext-Token wird ausschließlich über den URL-Fragment-Bootstrap
+eingeliefert. Der danach verwendete Zugriffskontext ist ein kryptografisch
+signierter Cookie, der die nicht geheime Datensatz-ID referenzieren darf, aber
+niemals den Token enthält. Bei jedem fachlichen Request wird der
+Review-Link-Datensatz erneut auf `revoked_at IS NULL` geprüft. Dafür ist keine
+zusätzliche persistierte Sessiontabelle erforderlich; Migration 008 und das
+bestehende `review_links`-Modell bleiben ausreichend.
+
 Die für eine menschliche Entscheidung verwendete Benutzerreferenz wird
 ausschließlich serverseitig aus der Datensatz-ID als
 `review_link:<token_record_id>` abgeleitet. Der Browser ist nicht Eigentümer
