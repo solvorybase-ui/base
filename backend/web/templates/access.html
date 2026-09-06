@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Zugriff · Solvory Review{% endblock %}
+{% block head %}<script src="{{ url_for('static', path='/bootstrap.js') }}" defer></script>{% endblock %}
+{% block content %}
+<section class="empty-state" aria-live="polite">
+  <div class="empty-icon" aria-hidden="true">S</div>
+  <h1>Review-Zugriff</h1>
+  <p id="access-status">Zugriff wird geprüft …</p>
+</section>
+{% endblock %}

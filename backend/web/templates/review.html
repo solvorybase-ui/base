@@ -60,7 +60,7 @@
   </div>
 </article>
 
-<form class="decision-bar" method="post" action="/r/{{ request.path_params.token }}/decision">
+<form class="decision-bar" method="post" action="/review/decision">
   <input type="hidden" name="review_session_item_id" value="{{ item.review_session_item_id }}">
   <button class="decision hit" type="submit" name="decision" value="hit">HIT</button>
   <button class="decision no-hit" type="submit" name="decision" value="no_hit">NO HIT</button>

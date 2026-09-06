@@ -9,6 +9,7 @@ import secrets
 from .link_repository import (
     ConnectionLike,
     create_review_link_record,
+    find_active_review_link_by_id,
     find_active_review_link_by_hash,
     revoke_review_link_record,
 )
@@ -24,7 +25,7 @@ class CreatedReviewLink:
 
     @property
     def path(self) -> str:
-        return f"/r/{self.token}"
+        return f"/#{self.token}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +67,24 @@ def validate_review_token(
     record = find_active_review_link_by_hash(
         connection,
         token_hash=hash_review_token(token),
+    )
+    if record is None:
+        return None
+    return ReviewLinkIdentity(
+        token_record_id=record.id,
+        decided_by_user_ref=derive_decided_by_user_ref(record.id),
+    )
+
+
+def validate_review_link_identity(
+    connection: ConnectionLike, *, token_record_id: str
+) -> ReviewLinkIdentity | None:
+    """Resolve a signed-cookie record id only while its link remains active."""
+    if not token_record_id:
+        return None
+    record = find_active_review_link_by_id(
+        connection,
+        token_record_id=token_record_id,
     )
     if record is None:
         return None

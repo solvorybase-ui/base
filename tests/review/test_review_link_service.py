@@ -7,6 +7,7 @@ import backend.review.link_service as service
 from backend.review.link_repository import (
     ReviewLinkRecord,
     create_review_link_record,
+    find_active_review_link_by_id,
     find_active_review_link_by_hash,
     revoke_review_link_record,
 )
@@ -65,7 +66,7 @@ def test_token_is_cryptographically_generated_and_long(monkeypatch):
 
     assert observed["bytes"] >= 32
     assert created.token == "strong-random-token"
-    assert created.path == "/r/strong-random-token"
+    assert created.path == "/#strong-random-token"
 
 
 def test_sha256_hashes_complete_token():
@@ -121,6 +122,35 @@ def test_wrong_or_revoked_token_is_rejected(monkeypatch):
     assert service.validate_review_token(object(), token="") is None
 
 
+def test_active_record_id_resolves_server_identity(monkeypatch):
+    monkeypatch.setattr(
+        service,
+        "find_active_review_link_by_id",
+        lambda connection, *, token_record_id: ReviewLinkRecord(
+            token_record_id, "a" * 64
+        ),
+    )
+
+    identity = service.validate_review_link_identity(
+        object(), token_record_id="uuid-1"
+    )
+
+    assert identity.token_record_id == "uuid-1"
+    assert identity.decided_by_user_ref == "review_link:uuid-1"
+
+
+def test_revoked_record_id_is_rejected(monkeypatch):
+    monkeypatch.setattr(
+        service,
+        "find_active_review_link_by_id",
+        lambda connection, *, token_record_id: None,
+    )
+
+    assert service.validate_review_link_identity(
+        object(), token_record_id="uuid-1"
+    ) is None
+
+
 def test_user_reference_is_derived_only_from_record_id():
     assert service.derive_decided_by_user_ref("abc") == "review_link:abc"
 
@@ -145,6 +175,20 @@ def test_repository_validation_requires_non_revoked_record():
 
     sql, _ = connection.calls[0]
     assert "revoked_at IS NULL" in sql
+    assert result.id == "link-1"
+
+
+def test_repository_cookie_validation_requires_non_revoked_record():
+    connection = FakeConnection(select_result=("link-1", "b" * 64))
+
+    result = find_active_review_link_by_id(
+        connection, token_record_id="link-1"
+    )
+
+    sql, params = connection.calls[0]
+    assert "id = %s" in sql
+    assert "revoked_at IS NULL" in sql
+    assert params == ("link-1",)
     assert result.id == "link-1"
 
 

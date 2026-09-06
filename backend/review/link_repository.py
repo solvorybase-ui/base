@@ -64,6 +64,26 @@ def find_active_review_link_by_hash(
     return ReviewLinkRecord(id=str(row[0]), token_hash=str(row[1]))
 
 
+def find_active_review_link_by_id(
+    connection: ConnectionLike, *, token_record_id: str
+) -> ReviewLinkRecord | None:
+    """Return a non-revoked Review Link by its non-secret stable id."""
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id, token_hash
+            FROM review_links
+            WHERE id = %s
+              AND revoked_at IS NULL
+            """,
+            (token_record_id,),
+        )
+        row = cursor.fetchone()
+    if row is None:
+        return None
+    return ReviewLinkRecord(id=str(row[0]), token_hash=str(row[1]))
+
+
 def revoke_review_link_record(
     connection: ConnectionLike, *, token_record_id: str
 ) -> bool:

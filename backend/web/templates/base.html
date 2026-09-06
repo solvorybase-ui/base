@@ -6,6 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <title>{% block title %}Solvory Review{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', path='/review.css') }}">
+  {% block head %}{% endblock %}
 </head>
 <body>
   <header class="site-header">
