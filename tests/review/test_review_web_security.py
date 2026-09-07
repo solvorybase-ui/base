@@ -84,6 +84,47 @@ def test_exact_origin_is_required(monkeypatch):
         security.require_valid_origin("https://other.example")
 
 
+@pytest.mark.parametrize("sec_fetch_site", ["same-origin", None])
+def test_exact_origin_is_allowed_regardless_of_fetch_metadata(
+    monkeypatch, sec_fetch_site
+):
+    monkeypatch.setenv(
+        security.REVIEW_PUBLIC_ORIGIN_ENV, "https://review.example"
+    )
+
+    security.require_valid_origin("https://review.example", sec_fetch_site)
+
+
+def test_null_origin_with_same_origin_fetch_metadata_is_allowed(monkeypatch):
+    monkeypatch.setenv(
+        security.REVIEW_PUBLIC_ORIGIN_ENV, "https://review.example"
+    )
+
+    security.require_valid_origin("null", "same-origin")
+
+
+@pytest.mark.parametrize(
+    ("origin", "sec_fetch_site"),
+    [
+        ("null", "cross-site"),
+        ("null", "same-site"),
+        ("null", "none"),
+        ("null", None),
+        (None, "same-origin"),
+        ("https://other.example", "same-origin"),
+    ],
+)
+def test_mobile_fallback_rejects_all_other_combinations(
+    monkeypatch, origin, sec_fetch_site
+):
+    monkeypatch.setenv(
+        security.REVIEW_PUBLIC_ORIGIN_ENV, "https://review.example"
+    )
+
+    with pytest.raises(PermissionError):
+        security.require_valid_origin(origin, sec_fetch_site)
+
+
 @pytest.mark.parametrize(
     ("origin", "expected_state", "expected_normalized"),
     [

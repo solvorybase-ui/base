@@ -65,13 +65,12 @@ def health() -> dict[str, str]:
 
 def _enforce_origin(request: Request) -> None:
     origin_header = request.headers.get("origin")
+    sec_fetch_site_header = request.headers.get("sec-fetch-site")
     try:
-        require_valid_origin(origin_header)
+        require_valid_origin(origin_header, sec_fetch_site_header)
     except PermissionError as exc:
         origin_state, normalized_origin = classify_request_origin(origin_header)
-        sec_fetch_site = classify_sec_fetch_site(
-            request.headers.get("sec-fetch-site")
-        )
+        sec_fetch_site = classify_sec_fetch_site(sec_fetch_site_header)
         if origin_state == "other" and normalized_origin is not None:
             logger.warning(
                 "review_origin_denied origin_state=%s normalized_origin=%s "

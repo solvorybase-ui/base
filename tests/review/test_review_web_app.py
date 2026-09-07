@@ -32,6 +32,7 @@ def request(
     method="GET",
     body=b"",
     origin=None,
+    sec_fetch_site=None,
     cookie=None,
     content_type="application/x-www-form-urlencoded",
 ):
@@ -47,6 +48,8 @@ def request(
     headers = [(b"content-type", content_type.encode("ascii"))]
     if origin is not None:
         headers.append((b"origin", origin.encode("ascii")))
+    if sec_fetch_site is not None:
+        headers.append((b"sec-fetch-site", sec_fetch_site.encode("ascii")))
     if cookie is not None:
         headers.append(
             (b"cookie", f"{REVIEW_COOKIE_NAME}={cookie}".encode("ascii"))
@@ -191,6 +194,28 @@ def test_access_rejects_missing_or_wrong_origin(monkeypatch, origin):
     assert error.value.status_code == 403
 
 
+def test_access_accepts_null_origin_only_for_same_origin_fetch(monkeypatch):
+    monkeypatch.setattr(
+        web, "validate_review_token", lambda c, *, token: valid_identity()
+    )
+
+    response = asyncio.run(
+        web.establish_review_access(
+            request(
+                "/review/access",
+                method="POST",
+                body=b"secret",
+                origin="null",
+                sec_fetch_site="same-origin",
+                content_type="text/plain",
+            ),
+            connection=object(),
+        )
+    )
+
+    assert response.status_code == 200
+
+
 def test_get_valid_cookie_renders_product(monkeypatch):
     permit_cookie_identity(monkeypatch)
     monkeypatch.setattr(web, "load_continuous_review", lambda c: state())
@@ -323,6 +348,33 @@ def test_decision_rejects_missing_or_wrong_origin(monkeypatch, origin):
             )
         )
     assert error.value.status_code == 403
+
+
+def test_decision_accepts_null_origin_for_same_origin_fetch(monkeypatch):
+    captured = {}
+    permit_cookie_identity(monkeypatch)
+    monkeypatch.setattr(
+        web,
+        "record_continuous_review_decision",
+        lambda c, **kwargs: captured.update(kwargs),
+    )
+
+    response = asyncio.run(
+        web.submit_decision(
+            request(
+                "/review/decision",
+                method="POST",
+                body=b"review_session_item_id=item-1&decision=later",
+                origin="null",
+                sec_fetch_site="same-origin",
+                cookie=valid_cookie(),
+            ),
+            connection=object(),
+        )
+    )
+
+    assert response.status_code == 303
+    assert captured["decision"] == "later"
 
 
 def test_stale_multi_device_post_redirects_without_second_write(monkeypatch):

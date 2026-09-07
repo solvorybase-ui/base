@@ -148,8 +148,17 @@ def classify_sec_fetch_site(value: str | None) -> str:
     return "other"
 
 
-def require_valid_origin(origin_header: str | None) -> None:
-    """Reject missing, malformed, or non-canonical browser origins."""
+def require_valid_origin(
+    origin_header: str | None,
+    sec_fetch_site_header: str | None = None,
+) -> None:
+    """Accept the canonical origin or the narrow same-origin mobile fallback."""
     origin_state, _ = classify_request_origin(origin_header)
-    if origin_state != "exact":
-        raise PermissionError("request origin denied")
+    if origin_state == "exact":
+        return
+    if (
+        origin_state == "null"
+        and classify_sec_fetch_site(sec_fetch_site_header) == "same-origin"
+    ):
+        return
+    raise PermissionError("request origin denied")
