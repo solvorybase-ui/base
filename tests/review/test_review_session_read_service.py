@@ -95,6 +95,22 @@ def test_session_and_items_are_loaded_with_all_ui_data():
     assert result.items[0].price == Decimal("19.99")
 
 
+def test_html_entities_are_decoded_for_ui_text():
+    row = list(projection_row())
+    row[3] = "B&uuml;rsten"
+    row[4] = "Fellpflegeb&uuml;rste"
+    row[7] = "F&uuml;r kurzes &amp; langes Fell"
+    row[8] = "L&ouml;st Unterwolle"
+    connection = QueueConnection(("session-1", "prepared"), [tuple(row)])
+
+    result = load_review_session_projection(connection, session_id="session-1")
+
+    assert result.items[0].family_name == "Bürsten"
+    assert result.items[0].variant_name == "Fellpflegebürste"
+    assert result.items[0].description == "Für kurzes & langes Fell"
+    assert result.items[0].scout_reason == "Löst Unterwolle"
+
+
 def test_images_keep_repository_order():
     connection = QueueConnection(
         ("session-1", "prepared"),

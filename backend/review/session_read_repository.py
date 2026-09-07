@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from html import unescape
 from typing import Any, Protocol, Sequence
 
 
@@ -129,22 +130,26 @@ _SESSION_ITEMS_SQL = """
 
 def _item_from_row(row: Sequence[object]) -> ReviewSessionItemProjection:
     raw_images = row[10] or ()
+
+    def display_text(value: object | None) -> str | None:
+        return None if value is None else unescape(str(value))
+
     return ReviewSessionItemProjection(
         review_session_item_id=str(row[0]),
         position=int(row[1]),
         product_variant_id=str(row[2]),
-        family_name=str(row[3]),
-        variant_name=str(row[4]),
-        brand_name=None if row[5] is None else str(row[5]),
-        category=None if row[6] is None else str(row[6]),
-        description=None if row[7] is None else str(row[7]),
-        scout_reason=str(row[8]),
+        family_name=display_text(row[3]) or "",
+        variant_name=display_text(row[4]) or "",
+        brand_name=display_text(row[5]),
+        category=display_text(row[6]),
+        description=display_text(row[7]),
+        scout_reason=display_text(row[8]) or "",
         current_decision=None if row[9] is None else str(row[9]),
         image_urls=tuple(str(url) for url in raw_images),
-        shop_name=None if row[11] is None else str(row[11]),
+        shop_name=display_text(row[11]),
         price=None if row[12] is None else Decimal(row[12]),
         currency=None if row[13] is None else str(row[13]),
-        offer_name=None if row[14] is None else str(row[14]),
+        offer_name=display_text(row[14]),
         product_url=None if row[15] is None else str(row[15]),
         availability=None if row[16] is None else str(row[16]),
     )

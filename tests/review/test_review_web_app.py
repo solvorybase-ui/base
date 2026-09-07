@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -275,6 +276,40 @@ def test_product_without_image_or_offer_is_renderable(monkeypatch):
     body = response.body.decode()
     assert "Kein Produktbild verfügbar" in body
     assert "Keine Angebotsinformationen verfügbar" in body
+
+
+@pytest.mark.parametrize(
+    ("stored_price", "display_price"),
+    [
+        (Decimal("228.0000"), "228,00 €"),
+        (Decimal("228.5"), "228,50 €"),
+        (Decimal("19.99"), "19,99 €"),
+    ],
+)
+def test_price_is_formatted_for_display_without_mutating_decimal(
+    monkeypatch, stored_price, display_price
+):
+    permit_cookie_identity(monkeypatch)
+    current_state = state()
+    current_item = replace(
+        current_state.item,
+        price=stored_price,
+        currency="€",
+    )
+    current_state = ContinuousReviewState(
+        replace(current_state.session, items=(current_item,)),
+        current_item,
+    )
+    monkeypatch.setattr(
+        web, "load_continuous_review", lambda c: current_state
+    )
+
+    response = web.show_review(
+        request("/review", cookie=valid_cookie()), connection=object()
+    )
+
+    assert display_price in response.body.decode()
+    assert current_item.price is stored_price
 
 
 @pytest.mark.parametrize("decision", ["hit", "no_hit", "later"])

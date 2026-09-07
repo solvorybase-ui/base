@@ -3,7 +3,10 @@ import pytest
 import backend.review.continuous_service as service
 from backend.review.decision_repository import CurrentReviewRef
 from backend.review.session_read_repository import LockedReviewItem
-from backend.review.session_service import ReviewSessionBuildResult
+from backend.review.session_service import (
+    DEFAULT_SESSION_SIZE,
+    ReviewSessionBuildResult,
+)
 
 from tests.review.test_review_session_read_service import item
 
@@ -94,6 +97,82 @@ def test_finished_session_then_builds_next_queue(monkeypatch):
     state = service.load_continuous_review(Connection())
     assert completed == ["old"]
     assert state.session.session_id == "next"
+
+
+@pytest.mark.parametrize(
+    ("candidate_count", "expected_session_sizes"),
+    [
+        (25, [20, 5]),
+        (40, [20, 20]),
+        (41, [20, 20, 1]),
+        (20, [20]),
+        (0, []),
+    ],
+)
+def test_continuous_flow_uses_twenty_only_as_internal_session_size(
+    monkeypatch, candidate_count, expected_session_sizes
+):
+    pending = candidate_count
+    active = None
+    completed = []
+    built_sizes = []
+
+    def find_finished(_connection):
+        if active is not None and active["remaining"] == 0:
+            return [active["session_id"]]
+        return []
+
+    def complete(_connection, *, session_id):
+        nonlocal active
+        completed.append(session_id)
+        active = None
+
+    def load_next(_connection):
+        if active is None or active["remaining"] == 0:
+            return None
+        position = active["size"] - active["remaining"] + 1
+        session = type(
+            "Session",
+            (),
+            {
+                "session_id": active["session_id"],
+                "item_count": active["size"],
+            },
+        )()
+        return session, item(item_id=f"item-{position}")
+
+    def build(_connection):
+        nonlocal pending, active
+        if pending == 0:
+            return None
+        size = min(DEFAULT_SESSION_SIZE, pending)
+        pending -= size
+        built_sizes.append(size)
+        active = {
+            "session_id": f"session-{len(built_sizes)}",
+            "size": size,
+            "remaining": size,
+        }
+        return ReviewSessionBuildResult(active["session_id"], size)
+
+    monkeypatch.setattr(
+        service, "find_fully_decided_active_session_ids", find_finished
+    )
+    monkeypatch.setattr(service, "complete_review_session", complete)
+    monkeypatch.setattr(service, "load_next_open_review_item", load_next)
+    monkeypatch.setattr(service, "build_review_session", build)
+
+    displayed = 0
+    while True:
+        state = service.load_continuous_review(Connection())
+        if state.is_empty:
+            break
+        displayed += 1
+        active["remaining"] -= 1
+
+    assert displayed == candidate_count
+    assert built_sizes == expected_session_sizes
+    assert len(completed) == len(expected_session_sizes)
 
 
 def test_user_flow_requires_no_session_id(monkeypatch):

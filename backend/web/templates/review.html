@@ -47,7 +47,7 @@
       <dl>
         <div><dt>Shop</dt><dd>{{ item.shop_name }}</dd></div>
         {% if item.offer_name %}<div><dt>Angebot</dt><dd>{{ item.offer_name }}</dd></div>{% endif %}
-        <div><dt>Preis</dt><dd>{% if item.price is not none %}{{ item.price }} {{ item.currency or "" }}{% else %}Nicht angegeben{% endif %}</dd></div>
+        <div><dt>Preis</dt><dd>{% if item.price is not none %}{{ item.price|price }} {{ item.currency or "" }}{% else %}Nicht angegeben{% endif %}</dd></div>
         <div><dt>Verfügbarkeit</dt><dd>{{ item.availability or "Unbekannt" }}</dd></div>
       </dl>
       {% if item.product_url %}

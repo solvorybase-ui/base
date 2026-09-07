@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from decimal import Decimal
 from pathlib import Path
 from urllib.parse import parse_qs
 
@@ -35,6 +36,14 @@ from .security import (
 BASE_DIR = Path(__file__).resolve().parent
 logger = logging.getLogger(__name__)
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+def format_price(value: Decimal) -> str:
+    """Format a stored Decimal price for German-language presentation."""
+    return format(value, ".2f").replace(".", ",")
+
+
+templates.env.filters["price"] = format_price
 
 app = FastAPI(title="Solvory Review", docs_url=None, redoc_url=None)
 app.mount(
