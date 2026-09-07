@@ -123,13 +123,33 @@ def get_review_public_origin() -> str:
     )
 
 
+def classify_request_origin(origin_header: str | None) -> tuple[str, str | None]:
+    """Classify an Origin without retaining unsafe or secret-bearing input."""
+    if origin_header is None or not origin_header.strip():
+        return "missing", None
+    if origin_header.strip().lower() == "null":
+        return "null", None
+    try:
+        normalized_origin = normalize_review_public_origin(origin_header)
+    except ReviewSecurityConfigurationError:
+        return "other", None
+    if hmac.compare_digest(normalized_origin, get_review_public_origin()):
+        return "exact", normalized_origin
+    return "other", normalized_origin
+
+
+def classify_sec_fetch_site(value: str | None) -> str:
+    """Return only a bounded Fetch Metadata classification for diagnostics."""
+    if value is None or not value.strip():
+        return "missing"
+    normalized = value.strip().lower()
+    if normalized in {"same-origin", "same-site", "cross-site", "none"}:
+        return normalized
+    return "other"
+
+
 def require_valid_origin(origin_header: str | None) -> None:
     """Reject missing, malformed, or non-canonical browser origins."""
-    if not origin_header:
-        raise PermissionError("request origin denied")
-    try:
-        supplied_origin = normalize_review_public_origin(origin_header)
-    except ReviewSecurityConfigurationError as exc:
-        raise PermissionError("request origin denied") from exc
-    if not hmac.compare_digest(supplied_origin, get_review_public_origin()):
+    origin_state, _ = classify_request_origin(origin_header)
+    if origin_state != "exact":
         raise PermissionError("request origin denied")

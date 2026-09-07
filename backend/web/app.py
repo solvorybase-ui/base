@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from urllib.parse import parse_qs
 
@@ -23,6 +24,8 @@ from backend.review.link_service import (
 from .database import get_database_connection
 from .security import (
     REVIEW_COOKIE_NAME,
+    classify_request_origin,
+    classify_sec_fetch_site,
     create_review_cookie_value,
     parse_review_cookie_value,
     require_valid_origin,
@@ -30,6 +33,7 @@ from .security import (
 
 
 BASE_DIR = Path(__file__).resolve().parent
+logger = logging.getLogger(__name__)
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 app = FastAPI(title="Solvory Review", docs_url=None, redoc_url=None)
@@ -60,9 +64,28 @@ def health() -> dict[str, str]:
 
 
 def _enforce_origin(request: Request) -> None:
+    origin_header = request.headers.get("origin")
     try:
-        require_valid_origin(request.headers.get("origin"))
+        require_valid_origin(origin_header)
     except PermissionError as exc:
+        origin_state, normalized_origin = classify_request_origin(origin_header)
+        sec_fetch_site = classify_sec_fetch_site(
+            request.headers.get("sec-fetch-site")
+        )
+        if origin_state == "other" and normalized_origin is not None:
+            logger.warning(
+                "review_origin_denied origin_state=%s normalized_origin=%s "
+                "sec_fetch_site=%s",
+                origin_state,
+                normalized_origin,
+                sec_fetch_site,
+            )
+        else:
+            logger.warning(
+                "review_origin_denied origin_state=%s sec_fetch_site=%s",
+                origin_state,
+                sec_fetch_site,
+            )
         raise HTTPException(status_code=403, detail="Request origin denied") from exc
 
 

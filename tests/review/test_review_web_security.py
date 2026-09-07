@@ -82,3 +82,40 @@ def test_exact_origin_is_required(monkeypatch):
         security.require_valid_origin(None)
     with pytest.raises(PermissionError):
         security.require_valid_origin("https://other.example")
+
+
+@pytest.mark.parametrize(
+    ("origin", "expected_state", "expected_normalized"),
+    [
+        (None, "missing", None),
+        ("null", "null", None),
+        ("https://review.example", "exact", "https://review.example"),
+        ("https://other.example/", "other", "https://other.example"),
+    ],
+)
+def test_origin_diagnostic_classification(
+    monkeypatch, origin, expected_state, expected_normalized
+):
+    monkeypatch.setenv(
+        security.REVIEW_PUBLIC_ORIGIN_ENV, "https://review.example"
+    )
+
+    assert security.classify_request_origin(origin) == (
+        expected_state,
+        expected_normalized,
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (None, "missing"),
+        ("same-origin", "same-origin"),
+        ("same-site", "same-site"),
+        ("cross-site", "cross-site"),
+        ("none", "none"),
+        ("untrusted value", "other"),
+    ],
+)
+def test_sec_fetch_site_diagnostic_is_bounded(value, expected):
+    assert security.classify_sec_fetch_site(value) == expected
