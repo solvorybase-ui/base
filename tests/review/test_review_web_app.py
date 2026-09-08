@@ -36,6 +36,7 @@ def request(
     sec_fetch_site=None,
     cookie=None,
     content_type="application/x-www-form-urlencoded",
+    accept=None,
 ):
     sent = False
 
@@ -47,6 +48,8 @@ def request(
         return {"type": "http.request", "body": body, "more_body": False}
 
     headers = [(b"content-type", content_type.encode("ascii"))]
+    if accept is not None:
+        headers.append((b"accept", accept.encode("ascii")))
     if origin is not None:
         headers.append((b"origin", origin.encode("ascii")))
     if sec_fetch_site is not None:
@@ -288,7 +291,64 @@ def test_review_preloads_only_main_images_of_next_two_items(monkeypatch):
         'rel="preload" as="image" '
         'href="https://images.test/next-2-main.jpg"' in body
     )
-    assert "next-1-extra.jpg" not in body
+    assert body.count('rel="preload" as="image"') == 2
+    assert "next-1-extra.jpg" in body
+    assert 'data-item-id="item-2"' in body
+    assert 'data-item-id="item-3"' in body
+    assert "review.js" in body
+
+
+def test_prefetched_product_contains_complete_read_only_ui_data(monkeypatch):
+    permit_cookie_identity(monkeypatch)
+    current = item(item_id="item-1", position=1)
+    prefetched = replace(
+        item(item_id="item-2", position=2),
+        family_name="Prefetch Family",
+        variant_name="Prefetch Product",
+        brand_name="Prefetch Brand",
+        category="Prefetch Category",
+        description="Prefetch Description",
+        scout_reason="Prefetch Scout Reason",
+        shop_name="Prefetch Shop",
+        price=Decimal("12.34"),
+        currency="EUR",
+        availability="available",
+        product_url="https://shop.test/prefetched",
+        image_urls=("https://images.test/main.jpg", "https://images.test/extra.jpg"),
+    )
+    session = ReviewSessionProjection(
+        "session-1", "prepared", 2, (current, prefetched)
+    )
+    monkeypatch.setattr(
+        web,
+        "load_continuous_review",
+        lambda c: ContinuousReviewState(
+            session,
+            current,
+            open_count=2,
+            prefetch_items=(prefetched,),
+        ),
+    )
+
+    body = web.show_review(
+        request("/review", cookie=valid_cookie()), connection=object()
+    ).body.decode()
+
+    for expected in (
+        "Prefetch Family",
+        "Prefetch Product",
+        "Prefetch Brand",
+        "Prefetch Category",
+        "Prefetch Description",
+        "Prefetch Scout Reason",
+        "Prefetch Shop",
+        "12,34 EUR",
+        "available",
+        "https://shop.test/prefetched",
+        "https://images.test/main.jpg",
+        "https://images.test/extra.jpg",
+    ):
+        assert expected in body
 
 
 @pytest.mark.parametrize("cookie", [None, "invalid.cookie.value"])
@@ -403,6 +463,37 @@ def test_post_delegates_human_decision_and_redirects(monkeypatch, decision):
     }
 
 
+@pytest.mark.parametrize("decision", ["hit", "no_hit", "later"])
+def test_fetch_decision_returns_json_success(monkeypatch, decision):
+    captured = {}
+    permit_cookie_identity(monkeypatch)
+    monkeypatch.setattr(
+        web,
+        "record_continuous_review_decision",
+        lambda c, **kwargs: captured.update(kwargs),
+    )
+
+    response = asyncio.run(
+        web.submit_decision(
+            request(
+                "/review/decision",
+                method="POST",
+                body=(
+                    f"review_session_item_id=item-1&decision={decision}"
+                ).encode(),
+                origin=PUBLIC_ORIGIN,
+                cookie=valid_cookie(),
+                accept="application/json",
+            ),
+            connection=object(),
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.body == b'{"ok":true}'
+    assert captured["decision"] == decision
+
+
 def test_client_identity_fields_are_rejected(monkeypatch):
     permit_cookie_identity(monkeypatch)
     body = (
@@ -497,6 +588,62 @@ def test_stale_multi_device_post_redirects_without_second_write(monkeypatch):
     assert response.status_code == 303
     assert response.headers["location"] == "/review"
     assert len(calls) == 1
+
+
+def test_stale_fetch_returns_conflict_without_success(monkeypatch):
+    permit_cookie_identity(monkeypatch)
+    monkeypatch.setattr(
+        web,
+        "record_continuous_review_decision",
+        lambda c, **kwargs: (_ for _ in ()).throw(
+            StaleReviewItemError("already decided")
+        ),
+    )
+
+    response = asyncio.run(
+        web.submit_decision(
+            request(
+                "/review/decision",
+                method="POST",
+                body=b"review_session_item_id=item-1&decision=hit",
+                origin=PUBLIC_ORIGIN,
+                cookie=valid_cookie(),
+                accept="application/json",
+            ),
+            connection=object(),
+        )
+    )
+
+    assert response.status_code == 409
+    assert response.body == b'{"ok":false,"stale":true}'
+
+
+def test_fast_next_script_waits_for_ack_updates_count_and_has_safe_fallbacks():
+    script = Path("backend/web/static/review.js").read_text(encoding="utf-8")
+
+    assert 'fetch(form.action' in script
+    assert script.index("await fetch(form.action") < script.index(
+        "if (!showPrefetchedProduct())"
+    )
+    assert "response.status === 409" in script
+    assert "window.location.reload()" in script
+    assert 'window.location.assign("/review")' in script
+    assert "Math.max(0, openCount - 1)" in script
+    assert 'fetch("/review"' in script
+    assert "prefetched.shift()" in script
+    assert "token" not in script.lower()
+
+
+def test_csp_allows_local_review_script_without_inline_script():
+    async def call_next(_request):
+        return Response("ok")
+
+    response = asyncio.run(web.review_security_headers(request("/review"), call_next))
+    csp = response.headers["Content-Security-Policy"]
+
+    assert "script-src 'self'" in csp
+    assert "unsafe-inline" not in csp
+    assert "unsafe-eval" not in csp
 
 
 def test_get_never_invokes_decision_write(monkeypatch):

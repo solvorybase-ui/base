@@ -54,6 +54,8 @@ def test_succeeded_selected_is_returned():
             "Description",
             {"size": "M"},
             "Scout reason",
+            "shop-1",
+            "Shop One",
             "2026-01-01T00:00:00Z",
         )
     ]
@@ -64,6 +66,8 @@ def test_succeeded_selected_is_returned():
     assert candidates[0].variant_id == "variant-1"
     assert candidates[0].scout_result_id == "scout-1"
     assert candidates[0].scout_reason == "Scout reason"
+    assert candidates[0].shop_id == "shop-1"
+    assert candidates[0].shop_name == "Shop One"
 
 
 def test_succeeded_rejected_is_excluded():
@@ -130,6 +134,16 @@ def test_query_has_deterministic_order():
     assert "ORDER BY sr.finished_at, pv.id, sr.id" in sql
 
 
+def test_candidate_shop_uses_same_deterministic_active_offer_selection():
+    sql, _ = query_for_candidates()
+    assert "LEFT JOIN LATERAL" in sql
+    assert "o.is_active = true" in sql
+    assert "o.archived_at IS NULL" in sql
+    assert "s.is_active = true" in sql
+    assert "s.archived_at IS NULL" in sql
+    assert "ORDER BY o.last_seen_at DESC, o.id" in sql
+
+
 def test_limit_is_forwarded_to_query():
     connection = FakeConnection([])
     load_review_candidates(connection, limit=12)
@@ -140,6 +154,16 @@ def test_limit_is_forwarded_to_query():
 def test_limit_must_be_positive():
     with pytest.raises(ValueError):
         load_review_candidates(FakeConnection([]), limit=0)
+
+
+def test_unlimited_candidate_pool_omits_sql_limit():
+    connection = FakeConnection([])
+
+    load_review_candidates(connection, limit=None)
+
+    sql, params = connection.calls[0]
+    assert "LIMIT %s" not in sql
+    assert params is None
 
 
 def test_global_open_count_uses_selected_review_eligibility_without_session_limit():

@@ -32,6 +32,8 @@ class ReviewCandidate:
     description: str | None
     variant_attributes: dict[str, object] = field(default_factory=dict)
     scout_reason: str = ""
+    shop_id: str | None = None
+    shop_name: str | None = None
 
 
 _ELIGIBLE_SCOUT_JOIN_SQL = """
@@ -39,9 +41,26 @@ _ELIGIBLE_SCOUT_JOIN_SQL = """
             JOIN product_families pf
               ON pf.id = pv.product_family_id
             JOIN scout_results sr
-              ON sr.product_variant_id = pv.id
+             ON sr.product_variant_id = pv.id
              AND sr.technical_status = 'succeeded'
              AND sr.decision = 'selected'
+"""
+
+
+_SELECTED_OFFER_SHOP_JOIN_SQL = """
+            LEFT JOIN LATERAL (
+                SELECT s.id AS shop_id,
+                       s.name AS shop_name
+                FROM offers o
+                JOIN shops s ON s.id = o.shop_id
+                WHERE o.product_variant_id = pv.id
+                  AND o.is_active = true
+                  AND o.archived_at IS NULL
+                  AND s.is_active = true
+                  AND s.archived_at IS NULL
+                ORDER BY o.last_seen_at DESC, o.id
+                LIMIT 1
+            ) selected_offer ON true
 """
 
 
@@ -126,10 +145,10 @@ def count_open_review_variants(connection: ConnectionLike) -> int:
 
 
 def load_review_candidates(
-    connection: ConnectionLike, *, limit: int = 30
+    connection: ConnectionLike, *, limit: int | None = 30
 ) -> list[ReviewCandidate]:
     """Return deterministically ordered Product Variants eligible for review."""
-    if limit <= 0:
+    if limit is not None and limit <= 0:
         raise ValueError("limit must be greater than zero")
 
     query = (
@@ -145,19 +164,28 @@ def load_review_candidates(
                    pv.description,
                    pv.variant_attributes,
                    sr.reason,
+                   selected_offer.shop_id,
+                   selected_offer.shop_name,
                    sr.finished_at
         """
         + _ELIGIBLE_SCOUT_JOIN_SQL
+        + _SELECTED_OFFER_SHOP_JOIN_SQL
         + _OPEN_REVIEW_WHERE_SQL
         + _ACTIVE_SESSION_EXCLUSION_SQL
-        + """
+        + (
+            """
             ORDER BY sr.finished_at, pv.id, sr.id
             LIMIT %s
-        """
+            """
+            if limit is not None
+            else """
+            ORDER BY sr.finished_at, pv.id, sr.id
+            """
+        )
     )
 
     with connection.cursor() as cursor:
-        cursor.execute(query, (limit,))
+        cursor.execute(query, None if limit is None else (limit,))
         rows = cursor.fetchall()
 
     return [
@@ -172,6 +200,8 @@ def load_review_candidates(
             description=None if row[7] is None else str(row[7]),
             variant_attributes=dict(row[8] or {}),
             scout_reason=str(row[9]),
+            shop_id=None if row[10] is None else str(row[10]),
+            shop_name=None if row[11] is None else str(row[11]),
         )
         for row in rows
     ]

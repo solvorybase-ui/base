@@ -95,6 +95,25 @@ def test_session_and_items_are_loaded_with_all_ui_data():
     assert result.items[0].price == Decimal("19.99")
 
 
+def test_session_reload_and_multi_device_order_use_persisted_positions():
+    first_connection = QueueConnection(
+        ("session-1", "prepared"), [projection_row()]
+    )
+    second_connection = QueueConnection(
+        ("session-1", "prepared"), [projection_row()]
+    )
+
+    first = load_review_session_projection(
+        first_connection, session_id="session-1"
+    )
+    second = load_review_session_projection(
+        second_connection, session_id="session-1"
+    )
+
+    assert first.items == second.items
+    assert "ORDER BY rsi.position, rsi.id" in first_connection.calls[1][0]
+
+
 def test_html_entities_are_decoded_for_ui_text():
     row = list(projection_row())
     row[3] = "B&uuml;rsten"

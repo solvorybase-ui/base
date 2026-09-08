@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import random
+from collections import deque
 from dataclasses import dataclass
 from typing import ContextManager, Protocol
 
@@ -48,6 +50,39 @@ def _unique_candidates(
     return unique
 
 
+def _diversify_candidates(
+    candidates: list[ReviewCandidate],
+    *,
+    random_source: random.Random | random.SystemRandom | None = None,
+) -> list[ReviewCandidate]:
+    """Shuffle once within shop groups, then interleave groups round-robin."""
+    source = random_source or random.SystemRandom()
+    grouped_lists: dict[str, list[ReviewCandidate]] = {}
+    for candidate in _unique_candidates(candidates):
+        shop_key = candidate.shop_id or f"unassigned:{candidate.shop_name or ''}"
+        grouped_lists.setdefault(shop_key, []).append(candidate)
+
+    shop_keys = list(grouped_lists)
+    source.shuffle(shop_keys)
+    for group in grouped_lists.values():
+        source.shuffle(group)
+    groups = {
+        shop_key: deque(group)
+        for shop_key, group in grouped_lists.items()
+    }
+
+    diversified: list[ReviewCandidate] = []
+    while groups:
+        for shop_key in tuple(shop_keys):
+            group = groups.get(shop_key)
+            if not group:
+                groups.pop(shop_key, None)
+                shop_keys.remove(shop_key)
+                continue
+            diversified.append(group.popleft())
+    return diversified
+
+
 def build_review_session(
     connection: TransactionConnection,
     *,
@@ -59,9 +94,8 @@ def build_review_session(
             f"limit must be between 1 and {DEFAULT_SESSION_SIZE}"
         )
 
-    candidates = _unique_candidates(
-        load_review_candidates(connection, limit=limit)
-    )
+    candidate_pool = load_review_candidates(connection, limit=None)
+    candidates = _diversify_candidates(candidate_pool)[:limit]
     if not candidates:
         return None
 

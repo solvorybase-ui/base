@@ -1,25 +1,13 @@
 {% extends "base.html" %}
-{% block title %}{{ item.variant_name }} · Solvory Review{% endblock %}
-{% block head %}
-  {% for prefetch_item in prefetch_items %}
-    {% if prefetch_item.image_urls %}
-  <link rel="preload" as="image" href="{{ prefetch_item.image_urls[0] }}" referrerpolicy="no-referrer">
-    {% endif %}
-  {% endfor %}
-{% endblock %}
-{% block content %}
-<section class="progress" aria-label="Fortschritt">
-  {{ open_count }} offen
-</section>
-
-<article class="product-card">
-  {% if item.image_urls %}
+{% macro product_card(product) %}
+<article class="product-card" data-review-item-id="{{ product.review_session_item_id }}">
+  {% if product.image_urls %}
   <div class="gallery">
-    <img class="hero" src="{{ item.image_urls[0] }}" alt="{{ item.variant_name }}">
-    {% if item.image_urls|length > 1 %}
+    <img class="hero" src="{{ product.image_urls[0] }}" alt="{{ product.variant_name }}">
+    {% if product.image_urls|length > 1 %}
     <div class="thumbnails">
-      {% for image_url in item.image_urls[1:] %}
-      <img src="{{ image_url }}" alt="Weitere Ansicht von {{ item.variant_name }}" loading="lazy">
+      {% for image_url in product.image_urls[1:] %}
+      <img src="{{ image_url }}" alt="Weitere Ansicht von {{ product.variant_name }}" loading="lazy">
       {% endfor %}
     </div>
     {% endif %}
@@ -29,36 +17,36 @@
   {% endif %}
 
   <div class="product-body">
-    <p class="eyebrow">{{ item.brand_name or "Marke nicht angegeben" }}</p>
-    <h1>{{ item.variant_name }}</h1>
-    {% if item.family_name != item.variant_name %}
-    <p class="family">{{ item.family_name }}</p>
+    <p class="eyebrow">{{ product.brand_name or "Marke nicht angegeben" }}</p>
+    <h1>{{ product.variant_name }}</h1>
+    {% if product.family_name != product.variant_name %}
+    <p class="family">{{ product.family_name }}</p>
     {% endif %}
-    <p class="category">{{ item.category or "Kategorie nicht angegeben" }}</p>
+    <p class="category">{{ product.category or "Kategorie nicht angegeben" }}</p>
 
-    {% if item.description %}
+    {% if product.description %}
     <section>
       <h2>Beschreibung</h2>
-      <p class="long-text">{{ item.description }}</p>
+      <p class="long-text">{{ product.description }}</p>
     </section>
     {% endif %}
 
     <section class="scout-reason">
       <h2>Warum der Scout das Produkt vorlegt</h2>
-      <p>{{ item.scout_reason }}</p>
+      <p>{{ product.scout_reason }}</p>
     </section>
 
     <section class="offer">
       <h2>Angebot</h2>
-      {% if item.shop_name %}
+      {% if product.shop_name %}
       <dl>
-        <div><dt>Shop</dt><dd>{{ item.shop_name }}</dd></div>
-        {% if item.offer_name %}<div><dt>Angebot</dt><dd>{{ item.offer_name }}</dd></div>{% endif %}
-        <div><dt>Preis</dt><dd>{% if item.price is not none %}{{ item.price|price }} {{ item.currency or "" }}{% else %}Nicht angegeben{% endif %}</dd></div>
-        <div><dt>Verfügbarkeit</dt><dd>{{ item.availability or "Unbekannt" }}</dd></div>
+        <div><dt>Shop</dt><dd>{{ product.shop_name }}</dd></div>
+        {% if product.offer_name %}<div><dt>Angebot</dt><dd>{{ product.offer_name }}</dd></div>{% endif %}
+        <div><dt>Preis</dt><dd>{% if product.price is not none %}{{ product.price|price }} {{ product.currency or "" }}{% else %}Nicht angegeben{% endif %}</dd></div>
+        <div><dt>Verfügbarkeit</dt><dd>{{ product.availability or "Unbekannt" }}</dd></div>
       </dl>
-      {% if item.product_url %}
-      <a class="product-link" href="{{ item.product_url }}" target="_blank" rel="noopener noreferrer">Produkt beim Shop öffnen</a>
+      {% if product.product_url %}
+      <a class="product-link" href="{{ product.product_url }}" target="_blank" rel="noopener noreferrer">Produkt beim Shop öffnen</a>
       {% endif %}
       {% else %}
       <p>Keine Angebotsinformationen verfügbar.</p>
@@ -66,8 +54,35 @@
     </section>
   </div>
 </article>
+{% endmacro %}
+{% block title %}{{ item.variant_name }} · Solvory Review{% endblock %}
+{% block head %}
+  {% for prefetch_item in prefetch_items %}
+    {% if prefetch_item.image_urls %}
+  <link rel="preload" as="image" href="{{ prefetch_item.image_urls[0] }}" referrerpolicy="no-referrer">
+    {% endif %}
+  {% endfor %}
+  <script src="{{ url_for('static', path='/review.js') }}" defer></script>
+{% endblock %}
+{% block content %}
+<section id="open-count" class="progress" aria-label="Fortschritt" data-open-count="{{ open_count }}">
+  {{ open_count }} offen
+</section>
 
-<form class="decision-bar" method="post" action="/review/decision">
+{{ product_card(item) }}
+
+<div id="review-prefetch-cache" hidden>
+  {% for prefetch_item in prefetch_items %}
+  <template class="review-prefetch-item"
+            data-item-id="{{ prefetch_item.review_session_item_id }}"
+            data-title="{{ prefetch_item.variant_name }} · Solvory Review"
+            data-main-image="{{ prefetch_item.image_urls[0] if prefetch_item.image_urls else '' }}">
+    {{ product_card(prefetch_item) }}
+  </template>
+  {% endfor %}
+</div>
+
+<form id="review-decision-form" class="decision-bar" method="post" action="/review/decision">
   <input type="hidden" name="review_session_item_id" value="{{ item.review_session_item_id }}">
   <button class="decision hit" type="submit" name="decision" value="hit">HIT</button>
   <button class="decision no-hit" type="submit" name="decision" value="no_hit">NO HIT</button>

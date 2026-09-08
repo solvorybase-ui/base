@@ -11,7 +11,7 @@ from backend.review.session_repository import (
 )
 
 
-def candidate(number):
+def candidate(number, *, shop_id=None):
     return ReviewCandidate(
         variant_id=f"variant-{number}",
         scout_result_id=f"scout-{number}",
@@ -21,7 +21,14 @@ def candidate(number):
         variant_name=f"Variant {number}",
         model_name=None,
         description=None,
+        shop_id=shop_id,
+        shop_name=None if shop_id is None else f"Shop {shop_id}",
     )
+
+
+class NoShuffleRandom:
+    def shuffle(self, values):
+        return None
 
 
 class FakeTransaction:
@@ -64,6 +71,9 @@ def configure_service(monkeypatch, candidates, *, fail_at_position=None):
             raise RuntimeError("item insert failed")
 
     monkeypatch.setattr(service, "load_review_candidates", fake_load)
+    monkeypatch.setattr(
+        service.random, "SystemRandom", lambda: NoShuffleRandom()
+    )
     monkeypatch.setattr(service, "create_prepared_review_session", fake_create)
     monkeypatch.setattr(service, "add_review_session_item", fake_add)
     return events, limits
@@ -152,7 +162,7 @@ def test_canonical_eligibility_loader_is_used(monkeypatch):
 
     service.build_review_session(connection)
 
-    assert limits == [20]
+    assert limits == [None]
 
 
 @pytest.mark.parametrize("inactive_status", ["completed", "cancelled"])
@@ -207,14 +217,89 @@ def test_candidate_order_is_preserved(monkeypatch):
     ]
 
 
-def test_default_limit_is_twenty(monkeypatch):
+def test_default_session_limit_is_twenty(monkeypatch):
     connection = FakeConnection()
     _, limits = configure_service(monkeypatch, [])
 
     service.build_review_session(connection)
 
     assert service.DEFAULT_SESSION_SIZE == 20
-    assert limits == [20]
+    assert limits == [None]
+
+
+def test_candidates_from_three_shops_are_round_robin_mixed(monkeypatch):
+    connection = FakeConnection()
+    candidates = [
+        candidate(1, shop_id="a"),
+        candidate(2, shop_id="a"),
+        candidate(3, shop_id="a"),
+        candidate(4, shop_id="b"),
+        candidate(5, shop_id="b"),
+        candidate(6, shop_id="c"),
+    ]
+    events, _ = configure_service(monkeypatch, candidates)
+
+    service.build_review_session(connection)
+
+    variant_ids = [event[1]["product_variant_id"] for event in events[1:]]
+    assert variant_ids == [
+        "variant-1",
+        "variant-4",
+        "variant-6",
+        "variant-2",
+        "variant-5",
+        "variant-3",
+    ]
+
+
+def test_dominant_shop_remainder_fills_session_after_round_robin(monkeypatch):
+    connection = FakeConnection()
+    candidates = [
+        candidate(1, shop_id="a"),
+        candidate(2, shop_id="a"),
+        candidate(3, shop_id="a"),
+        candidate(4, shop_id="b"),
+    ]
+    events, _ = configure_service(monkeypatch, candidates)
+
+    service.build_review_session(connection)
+
+    assert [event[1]["product_variant_id"] for event in events[1:]] == [
+        "variant-1",
+        "variant-4",
+        "variant-2",
+        "variant-3",
+    ]
+
+
+def test_single_shop_still_creates_stable_positions(monkeypatch):
+    connection = FakeConnection()
+    candidates = [candidate(index, shop_id="a") for index in range(1, 4)]
+    events, _ = configure_service(monkeypatch, candidates)
+
+    service.build_review_session(connection)
+
+    items = [event[1] for event in events[1:]]
+    assert [entry["position"] for entry in items] == [1, 2, 3]
+    assert [entry["product_variant_id"] for entry in items] == [
+        "variant-1",
+        "variant-2",
+        "variant-3",
+    ]
+
+
+def test_session_never_persists_more_than_twenty_diversified_items(monkeypatch):
+    connection = FakeConnection()
+    candidates = [
+        candidate(index, shop_id=str(index % 3))
+        for index in range(1, 31)
+    ]
+    events, _ = configure_service(monkeypatch, candidates)
+
+    result = service.build_review_session(connection)
+
+    assert result.item_count == 20
+    assert len([event for event in events if event[0] == "item"]) == 20
 
 
 @pytest.mark.parametrize("invalid_limit", [0, 21])

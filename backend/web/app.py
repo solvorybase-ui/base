@@ -112,6 +112,10 @@ def _require_cookie_identity(request: Request, connection):
     return identity
 
 
+def _wants_json(request: Request) -> bool:
+    return "application/json" in request.headers.get("accept", "").lower()
+
+
 @app.get("/", response_class=HTMLResponse)
 def show_access_bootstrap(request: Request):
     return templates.TemplateResponse(
@@ -223,7 +227,13 @@ async def submit_decision(
             decided_by_user_ref=identity.decided_by_user_ref,
         )
     except StaleReviewItemError:
-        pass
+        if _wants_json(request):
+            return JSONResponse(
+                {"ok": False, "stale": True},
+                status_code=409,
+            )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid decision") from exc
+    if _wants_json(request):
+        return JSONResponse({"ok": True})
     return RedirectResponse(url="/review", status_code=303)
