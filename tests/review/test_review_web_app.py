@@ -105,7 +105,7 @@ def state(*, images=("https://example.test/image.jpg",), offer=True):
             availability=None,
         )
     session = ReviewSessionProjection("session-1", "prepared", 1, (current_item,))
-    return ContinuousReviewState(session, current_item)
+    return ContinuousReviewState(session, current_item, open_count=79)
 
 
 def test_bootstrap_page_contains_no_token_and_loads_local_script():
@@ -229,6 +229,66 @@ def test_get_valid_cookie_renders_product(monkeypatch):
     assert "HIT" in body and "NO HIT" in body and "SPÄTER" in body
     assert 'action="/review/decision"' in body
     assert "/r/" not in body
+
+
+def test_review_shows_global_open_count_not_internal_session_progress(monkeypatch):
+    permit_cookie_identity(monkeypatch)
+    current_state = state()
+    current_state = replace(
+        current_state,
+        session=replace(current_state.session, item_count=20),
+    )
+    monkeypatch.setattr(web, "load_continuous_review", lambda c: current_state)
+
+    response = web.show_review(
+        request("/review", cookie=valid_cookie()), connection=object()
+    )
+    body = response.body.decode()
+
+    assert "79 offen" in body
+    assert "Produkt 1 / 20" not in body
+
+
+def test_review_preloads_only_main_images_of_next_two_items(monkeypatch):
+    permit_cookie_identity(monkeypatch)
+    current = item(item_id="item-1", position=1)
+    next_one = item(
+        item_id="item-2",
+        position=2,
+        images=(
+            "https://images.test/next-1-main.jpg",
+            "https://images.test/next-1-extra.jpg",
+        ),
+    )
+    next_two = item(
+        item_id="item-3",
+        position=3,
+        images=("https://images.test/next-2-main.jpg",),
+    )
+    session = ReviewSessionProjection(
+        "session-1", "prepared", 3, (current, next_one, next_two)
+    )
+    current_state = ContinuousReviewState(
+        session,
+        current,
+        open_count=3,
+        prefetch_items=(next_one, next_two),
+    )
+    monkeypatch.setattr(web, "load_continuous_review", lambda c: current_state)
+
+    body = web.show_review(
+        request("/review", cookie=valid_cookie()), connection=object()
+    ).body.decode()
+
+    assert (
+        'rel="preload" as="image" '
+        'href="https://images.test/next-1-main.jpg"' in body
+    )
+    assert (
+        'rel="preload" as="image" '
+        'href="https://images.test/next-2-main.jpg"' in body
+    )
+    assert "next-1-extra.jpg" not in body
 
 
 @pytest.mark.parametrize("cookie", [None, "invalid.cookie.value"])

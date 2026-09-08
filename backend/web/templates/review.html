@@ -1,8 +1,15 @@
 {% extends "base.html" %}
 {% block title %}{{ item.variant_name }} · Solvory Review{% endblock %}
+{% block head %}
+  {% for prefetch_item in prefetch_items %}
+    {% if prefetch_item.image_urls %}
+  <link rel="preload" as="image" href="{{ prefetch_item.image_urls[0] }}" referrerpolicy="no-referrer">
+    {% endif %}
+  {% endfor %}
+{% endblock %}
 {% block content %}
 <section class="progress" aria-label="Fortschritt">
-  Produkt {{ item.position }} / {{ session.item_count }}
+  {{ open_count }} offen
 </section>
 
 <article class="product-card">

@@ -12,6 +12,7 @@ class CursorLike(Protocol):
     def execute(
         self, query: str, params: Sequence[object] | None = None
     ) -> Any: ...
+    def fetchone(self) -> Sequence[object] | None: ...
     def fetchall(self) -> list[Sequence[object]]: ...
 
 
@@ -33,28 +34,7 @@ class ReviewCandidate:
     scout_reason: str = ""
 
 
-def load_review_candidates(
-    connection: ConnectionLike, *, limit: int = 30
-) -> list[ReviewCandidate]:
-    """Return deterministically ordered Product Variants eligible for review."""
-    if limit <= 0:
-        raise ValueError("limit must be greater than zero")
-
-    with connection.cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT DISTINCT
-                   pv.id,
-                   sr.id,
-                   pf.name,
-                   pf.brand_name,
-                   pf.category,
-                   pv.name,
-                   pv.model_name,
-                   pv.description,
-                   pv.variant_attributes,
-                   sr.reason,
-                   sr.finished_at
+_ELIGIBLE_SCOUT_JOIN_SQL = """
             FROM product_variants pv
             JOIN product_families pf
               ON pf.id = pv.product_family_id
@@ -62,6 +42,10 @@ def load_review_candidates(
               ON sr.product_variant_id = pv.id
              AND sr.technical_status = 'succeeded'
              AND sr.decision = 'selected'
+"""
+
+
+_OPEN_REVIEW_WHERE_SQL = """
             WHERE pv.is_active = true
               AND pv.archived_at IS NULL
               AND NOT EXISTS (
@@ -110,6 +94,10 @@ def load_review_candidates(
                         WHERE correction.supersedes_review_id = r.id
                     )
               )
+"""
+
+
+_ACTIVE_SESSION_EXCLUSION_SQL = """
               AND NOT EXISTS (
                   SELECT 1
                   FROM review_session_items active_item
@@ -122,11 +110,54 @@ def load_review_candidates(
                         'prepared', 'open', 'in_progress'
                     )
               )
+"""
+
+
+def count_open_review_variants(connection: ConnectionLike) -> int:
+    """Count all unresolved succeeded/selected variants across sessions."""
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT count(DISTINCT pv.id)"
+            + _ELIGIBLE_SCOUT_JOIN_SQL
+            + _OPEN_REVIEW_WHERE_SQL
+        )
+        row = cursor.fetchone()
+    return 0 if row is None else int(row[0])
+
+
+def load_review_candidates(
+    connection: ConnectionLike, *, limit: int = 30
+) -> list[ReviewCandidate]:
+    """Return deterministically ordered Product Variants eligible for review."""
+    if limit <= 0:
+        raise ValueError("limit must be greater than zero")
+
+    query = (
+        """
+            SELECT DISTINCT
+                   pv.id,
+                   sr.id,
+                   pf.name,
+                   pf.brand_name,
+                   pf.category,
+                   pv.name,
+                   pv.model_name,
+                   pv.description,
+                   pv.variant_attributes,
+                   sr.reason,
+                   sr.finished_at
+        """
+        + _ELIGIBLE_SCOUT_JOIN_SQL
+        + _OPEN_REVIEW_WHERE_SQL
+        + _ACTIVE_SESSION_EXCLUSION_SQL
+        + """
             ORDER BY sr.finished_at, pv.id, sr.id
             LIMIT %s
-            """,
-            (limit,),
-        )
+        """
+    )
+
+    with connection.cursor() as cursor:
+        cursor.execute(query, (limit,))
         rows = cursor.fetchall()
 
     return [

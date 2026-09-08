@@ -2,7 +2,10 @@ import pytest
 
 import backend.review.continuous_service as service
 from backend.review.decision_repository import CurrentReviewRef
-from backend.review.session_read_repository import LockedReviewItem
+from backend.review.session_read_repository import (
+    LockedReviewItem,
+    ReviewSessionProjection,
+)
 from backend.review.session_service import (
     DEFAULT_SESSION_SIZE,
     ReviewSessionBuildResult,
@@ -30,9 +33,17 @@ class Connection:
         return Transaction(self)
 
 
-def open_pair(session_id="session-1"):
-    session = type("Session", (), {"session_id": session_id, "item_count": 1})()
-    return session, item()
+@pytest.fixture(autouse=True)
+def default_open_count(monkeypatch):
+    monkeypatch.setattr(service, "count_open_review_variants", lambda c: 1)
+
+
+def open_pair(session_id="session-1", *, items=None):
+    session_items = tuple(items or (item(),))
+    session = ReviewSessionProjection(
+        session_id, "prepared", len(session_items), session_items
+    )
+    return session, session_items[0]
 
 
 def configure_flow(monkeypatch, *, finished=(), current=None, built=None):
@@ -131,15 +142,21 @@ def test_continuous_flow_uses_twenty_only_as_internal_session_size(
         if active is None or active["remaining"] == 0:
             return None
         position = active["size"] - active["remaining"] + 1
-        session = type(
-            "Session",
-            (),
-            {
-                "session_id": active["session_id"],
-                "item_count": active["size"],
-            },
-        )()
-        return session, item(item_id=f"item-{position}")
+        session = ReviewSessionProjection(
+            active["session_id"],
+            "prepared",
+            active["size"],
+            tuple(
+                item(
+                    item_id=(
+                        f"{active['session_id']}-item-{item_position}"
+                    ),
+                    position=item_position,
+                )
+                for item_position in range(1, active["size"] + 1)
+            ),
+        )
+        return session, session.items[position - 1]
 
     def build(_connection):
         nonlocal pending, active
@@ -179,6 +196,97 @@ def test_user_flow_requires_no_session_id(monkeypatch):
     configure_flow(monkeypatch, current=open_pair())
     state = service.load_continuous_review(Connection())
     assert state.item.review_session_item_id == "item-1"
+
+
+def test_global_progress_is_dynamic_and_independent_of_session_size(monkeypatch):
+    session_items = tuple(
+        item(item_id=f"item-{position}", position=position)
+        for position in range(1, 21)
+    )
+    monkeypatch.setattr(service, "count_open_review_variants", lambda c: 79)
+    configure_flow(monkeypatch, current=open_pair(items=session_items))
+
+    state = service.load_continuous_review(Connection())
+
+    assert state.open_count == 79
+    assert state.session.item_count == 20
+
+
+def test_new_selected_candidates_increase_open_count_on_next_load(monkeypatch):
+    counts = iter((79, 80))
+    monkeypatch.setattr(
+        service, "count_open_review_variants", lambda c: next(counts)
+    )
+    configure_flow(monkeypatch, current=open_pair())
+
+    assert service.load_continuous_review(Connection()).open_count == 79
+    assert service.load_continuous_review(Connection()).open_count == 80
+
+
+def test_prefetch_contains_only_next_two_open_items(monkeypatch):
+    session_items = (
+        item(item_id="item-1", position=1),
+        item(item_id="item-2", position=2),
+        item(item_id="item-3", position=3),
+        item(item_id="item-4", position=4),
+    )
+    configure_flow(monkeypatch, current=open_pair(items=session_items))
+
+    connection = Connection()
+    monkeypatch.setattr(
+        service,
+        "record_review_decision",
+        lambda *args, **kwargs: pytest.fail("prefetch wrote a decision"),
+    )
+
+    state = service.load_continuous_review(connection)
+
+    assert [entry.review_session_item_id for entry in state.prefetch_items] == [
+        "item-2",
+        "item-3",
+    ]
+    assert connection.events == []
+
+
+def test_prefetch_uses_only_one_item_when_one_remains(monkeypatch):
+    session_items = (
+        item(item_id="item-1", position=1),
+        item(item_id="item-2", position=2),
+    )
+    configure_flow(monkeypatch, current=open_pair(items=session_items))
+
+    state = service.load_continuous_review(Connection())
+
+    assert tuple(entry.review_session_item_id for entry in state.prefetch_items) == (
+        "item-2",
+    )
+
+
+def test_prefetch_skips_decided_items_and_does_not_mutate_projection(monkeypatch):
+    decided = item(item_id="item-2", position=2, decision="hit")
+    session_items = (
+        item(item_id="item-1", position=1),
+        decided,
+        item(item_id="item-3", position=3),
+    )
+    pair = open_pair(items=session_items)
+    configure_flow(monkeypatch, current=pair)
+
+    state = service.load_continuous_review(Connection())
+
+    assert tuple(entry.review_session_item_id for entry in state.prefetch_items) == (
+        "item-3",
+    )
+    assert pair[0].items == session_items
+    assert decided.current_decision == "hit"
+
+
+def test_prefetch_is_empty_for_last_open_item(monkeypatch):
+    configure_flow(monkeypatch, current=open_pair())
+
+    state = service.load_continuous_review(Connection())
+
+    assert state.prefetch_items == ()
 
 
 def configure_decision(monkeypatch, *, locked=True, current=None):

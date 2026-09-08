@@ -1,6 +1,9 @@
 import pytest
 
-from backend.review.candidate_repository import load_review_candidates
+from backend.review.candidate_repository import (
+    count_open_review_variants,
+    load_review_candidates,
+)
 
 
 class FakeConnection:
@@ -27,6 +30,9 @@ class FakeCursor:
 
     def fetchall(self):
         return self.connection.rows
+
+    def fetchone(self):
+        return self.connection.rows[0] if self.connection.rows else None
 
 
 def query_for_candidates():
@@ -134,3 +140,24 @@ def test_limit_is_forwarded_to_query():
 def test_limit_must_be_positive():
     with pytest.raises(ValueError):
         load_review_candidates(FakeConnection([]), limit=0)
+
+
+def test_global_open_count_uses_selected_review_eligibility_without_session_limit():
+    connection = FakeConnection([(79,)])
+
+    assert count_open_review_variants(connection) == 79
+
+    sql, params = connection.calls[0]
+    assert params is None
+    assert "count(DISTINCT pv.id)" in sql
+    assert "sr.technical_status = 'succeeded'" in sql
+    assert "sr.decision = 'selected'" in sql
+    assert "r.decision = 'hit'" in sql
+    assert "r.decision = 'no_hit'" in sql
+    assert "r.decision = 'later'" in sql
+    assert "active_item" not in sql
+    assert "LIMIT" not in sql
+
+
+def test_global_open_count_is_zero_when_query_returns_no_row():
+    assert count_open_review_variants(FakeConnection([])) == 0

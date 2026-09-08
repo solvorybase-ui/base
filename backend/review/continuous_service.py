@@ -7,6 +7,7 @@ from typing import ContextManager, Protocol
 
 from psycopg.errors import UniqueViolation
 
+from .candidate_repository import count_open_review_variants
 from .decision_repository import get_current_review
 from .decision_service import ReviewDecisionResult, record_review_decision
 from .session_read_repository import (
@@ -31,6 +32,8 @@ class StaleReviewItemError(ValueError):
 class ContinuousReviewState:
     session: ReviewSessionProjection | None
     item: ReviewSessionItemProjection | None
+    open_count: int = 0
+    prefetch_items: tuple[ReviewSessionItemProjection, ...] = ()
 
     @property
     def is_empty(self) -> bool:
@@ -42,14 +45,35 @@ def _complete_finished_sessions(connection: TransactionConnection) -> None:
         complete_review_session(connection, session_id=session_id)
 
 
+def _state_with_current(
+    current: tuple[ReviewSessionProjection, ReviewSessionItemProjection],
+    *,
+    open_count: int,
+) -> ContinuousReviewState:
+    session, current_item = current
+    remaining_items = (
+        item
+        for item in session.items
+        if item.position > current_item.position
+        and item.current_decision is None
+    )
+    return ContinuousReviewState(
+        session=session,
+        item=current_item,
+        open_count=open_count,
+        prefetch_items=tuple(remaining_items)[:2],
+    )
+
+
 def load_continuous_review(
     connection: TransactionConnection,
 ) -> ContinuousReviewState:
     """Continue an active queue, build the next one, or return empty state."""
     _complete_finished_sessions(connection)
+    open_count = count_open_review_variants(connection)
     current = load_next_open_review_item(connection)
     if current is not None:
-        return ContinuousReviewState(session=current[0], item=current[1])
+        return _state_with_current(current, open_count=open_count)
 
     try:
         created = build_review_session(connection)
@@ -59,7 +83,7 @@ def load_continuous_review(
         current = load_next_open_review_item(connection)
         if current is None:
             raise
-        return ContinuousReviewState(session=current[0], item=current[1])
+        return _state_with_current(current, open_count=open_count)
 
     if created is None:
         return ContinuousReviewState(session=None, item=None)
@@ -67,7 +91,7 @@ def load_continuous_review(
     current = load_next_open_review_item(connection)
     if current is None:
         raise RuntimeError("new review session contains no open item")
-    return ContinuousReviewState(session=current[0], item=current[1])
+    return _state_with_current(current, open_count=open_count)
 
 
 def record_continuous_review_decision(

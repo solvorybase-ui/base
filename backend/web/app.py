@@ -177,7 +177,12 @@ def show_review(
     return templates.TemplateResponse(
         request=request,
         name="review.html",
-        context={"session": state.session, "item": state.item},
+        context={
+            "session": state.session,
+            "item": state.item,
+            "open_count": state.open_count,
+            "prefetch_items": state.prefetch_items,
+        },
     )
 
 
