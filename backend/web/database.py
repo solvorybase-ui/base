@@ -20,5 +20,8 @@ def get_database_connection() -> Iterator[object]:
     """Yield one request-scoped Psycopg 3 connection."""
     import psycopg
 
-    with psycopg.connect(get_database_url()) as connection:
+    # Read checks run in autocommit mode; domain services open explicit atomic
+    # transactions for writes. This avoids turning their transaction blocks
+    # into nested savepoints after an earlier request-level read.
+    with psycopg.connect(get_database_url(), autocommit=True) as connection:
         yield connection

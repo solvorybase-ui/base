@@ -8,8 +8,14 @@ from typing import ContextManager, Protocol
 from psycopg.errors import UniqueViolation
 
 from .candidate_repository import count_open_review_variants
-from .decision_repository import get_current_review
-from .decision_service import ReviewDecisionResult, record_review_decision
+from .decision_repository import (
+    ReviewSessionItemRef,
+    get_current_review,
+)
+from .decision_service import (
+    ReviewDecisionResult,
+    record_review_decision_in_transaction,
+)
 from .session_read_repository import (
     ReviewSessionItemProjection,
     ReviewSessionProjection,
@@ -117,12 +123,15 @@ def record_continuous_review_decision(
         if current is not None:
             raise StaleReviewItemError("review item was already decided")
 
-        result = record_review_decision(
+        result = record_review_decision_in_transaction(
             connection,
-            review_session_item_id=review_session_item_id,
+            item=ReviewSessionItemRef(
+                id=locked_item.review_session_item_id,
+                product_variant_id=locked_item.product_variant_id,
+            ),
+            current=current,
             decision=decision,
             decided_by_user_ref=decided_by_user_ref,
         )
 
-    _complete_finished_sessions(connection)
     return result

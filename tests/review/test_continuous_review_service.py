@@ -235,7 +235,7 @@ def test_prefetch_contains_only_next_two_open_items(monkeypatch):
     connection = Connection()
     monkeypatch.setattr(
         service,
-        "record_review_decision",
+        "record_review_decision_in_transaction",
         lambda *args, **kwargs: pytest.fail("prefetch wrote a decision"),
     )
 
@@ -291,11 +291,12 @@ def test_prefetch_is_empty_for_last_open_item(monkeypatch):
 
 def configure_decision(monkeypatch, *, locked=True, current=None):
     captured = {}
-    monkeypatch.setattr(service, "find_fully_decided_active_session_ids", lambda c: [])
     monkeypatch.setattr(
         service,
         "lock_open_review_item",
-        lambda c, *, review_session_item_id: LockedReviewItem(review_session_item_id, "session-1") if locked else None,
+        lambda c, *, review_session_item_id: LockedReviewItem(
+            review_session_item_id, "session-1", "variant-1"
+        ) if locked else None,
     )
     monkeypatch.setattr(service, "get_current_review", lambda c, *, review_session_item_id: current)
 
@@ -303,7 +304,7 @@ def configure_decision(monkeypatch, *, locked=True, current=None):
         captured.update(kwargs)
         return "result"
 
-    monkeypatch.setattr(service, "record_review_decision", record)
+    monkeypatch.setattr(service, "record_review_decision_in_transaction", record)
     return captured
 
 
@@ -318,7 +319,40 @@ def test_decision_locks_and_delegates_to_existing_service(monkeypatch):
     )
     assert result == "result"
     assert captured["decision"] == "hit"
+    assert captured["item"].product_variant_id == "variant-1"
+    assert captured["current"] is None
     assert connection.events == ["begin", "commit"]
+
+
+def test_decision_defers_finished_session_work_to_next_read(monkeypatch):
+    configure_decision(monkeypatch)
+    monkeypatch.setattr(
+        service,
+        "find_fully_decided_active_session_ids",
+        lambda c: pytest.fail("POST queried finished sessions"),
+    )
+    monkeypatch.setattr(
+        service,
+        "complete_review_session",
+        lambda c, *, session_id: pytest.fail("POST completed a session"),
+    )
+    monkeypatch.setattr(
+        service,
+        "count_open_review_variants",
+        lambda c: pytest.fail("POST counted open candidates"),
+    )
+    monkeypatch.setattr(
+        service,
+        "load_next_open_review_item",
+        lambda c: pytest.fail("POST loaded the next item"),
+    )
+
+    service.record_continuous_review_decision(
+        Connection(),
+        review_session_item_id="item-1",
+        decision="hit",
+        decided_by_user_ref="review_link:link-1",
+    )
 
 
 def test_stale_decided_item_does_not_write_second_review(monkeypatch):

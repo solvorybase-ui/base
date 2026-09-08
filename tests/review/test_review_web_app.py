@@ -494,6 +494,37 @@ def test_fetch_decision_returns_json_success(monkeypatch, decision):
     assert captured["decision"] == decision
 
 
+def test_fetch_decision_does_not_load_next_state_or_open_count(monkeypatch):
+    permit_cookie_identity(monkeypatch)
+    monkeypatch.setattr(
+        web,
+        "record_continuous_review_decision",
+        lambda c, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        web,
+        "load_continuous_review",
+        lambda c: pytest.fail("POST loaded continuous next state"),
+    )
+
+    response = asyncio.run(
+        web.submit_decision(
+            request(
+                "/review/decision",
+                method="POST",
+                body=b"review_session_item_id=item-1&decision=hit",
+                origin=PUBLIC_ORIGIN,
+                cookie=valid_cookie(),
+                accept="application/json",
+            ),
+            connection=object(),
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.body == b'{"ok":true}'
+
+
 def test_client_identity_fields_are_rejected(monkeypatch):
     permit_cookie_identity(monkeypatch)
     body = (

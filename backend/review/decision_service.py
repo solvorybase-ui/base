@@ -71,41 +71,73 @@ def record_review_decision(
             review_session_item_id=review_session_item_id,
         )
 
-        if current is not None and current.decision == "no_hit":
-            raise ValueError(
-                "a current no_hit decision requires administrative override"
-            )
-        if current is not None and normalized_reason is None:
-            raise ValueError("reason is required when correcting a decision")
-
-        if decision == "no_hit":
-            active_block = get_active_no_hit_block(
-                connection,
-                product_variant_id=item.product_variant_id,
-            )
-            if active_block is not None:
-                raise ValueError("an active no-hit block already exists")
-
-        supersedes_review_id = None if current is None else current.id
-        review_id = create_review(
+        return record_review_decision_in_transaction(
             connection,
-            review_session_item_id=item.id,
+            item=item,
+            current=current,
             decision=decision,
             decided_by_user_ref=user_ref,
             reason=normalized_reason,
-            supersedes_review_id=supersedes_review_id,
-            correction_reason=(
-                normalized_reason if supersedes_review_id is not None else None
-            ),
         )
 
-        if decision == "no_hit":
-            create_no_hit_block(
-                connection,
-                product_variant_id=item.product_variant_id,
-                review_session_item_id=item.id,
-                origin_review_id=review_id,
-            )
+
+def record_review_decision_in_transaction(
+    connection: TransactionConnection,
+    *,
+    item: ReviewSessionItemRef,
+    current: CurrentReviewRef | None,
+    decision: str,
+    decided_by_user_ref: str,
+    reason: str | None = None,
+) -> ReviewDecisionResult:
+    """Append a decision while the caller owns the transaction and item lock.
+
+    This is the domain-service entry point for the latency-sensitive web flow.
+    It deliberately retains all decision and NO-HIT rules while avoiding a
+    second item lookup, current-review lookup, and nested transaction.
+    """
+    if decision not in VALID_DECISIONS:
+        raise ValueError("decision must be hit, no_hit, or later")
+    user_ref = _required_text(
+        decided_by_user_ref, field_name="decided_by_user_ref"
+    )
+    normalized_reason = _optional_text(reason)
+
+    if current is not None and current.decision == "no_hit":
+        raise ValueError(
+            "a current no_hit decision requires administrative override"
+        )
+    if current is not None and normalized_reason is None:
+        raise ValueError("reason is required when correcting a decision")
+
+    if decision == "no_hit":
+        active_block = get_active_no_hit_block(
+            connection,
+            product_variant_id=item.product_variant_id,
+        )
+        if active_block is not None:
+            raise ValueError("an active no-hit block already exists")
+
+    supersedes_review_id = None if current is None else current.id
+    review_id = create_review(
+        connection,
+        review_session_item_id=item.id,
+        decision=decision,
+        decided_by_user_ref=user_ref,
+        reason=normalized_reason,
+        supersedes_review_id=supersedes_review_id,
+        correction_reason=(
+            normalized_reason if supersedes_review_id is not None else None
+        ),
+    )
+
+    if decision == "no_hit":
+        create_no_hit_block(
+            connection,
+            product_variant_id=item.product_variant_id,
+            review_session_item_id=item.id,
+            origin_review_id=review_id,
+        )
 
     return ReviewDecisionResult(
         review_id=review_id,

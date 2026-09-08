@@ -100,6 +100,26 @@ def test_normal_decision_succeeds(monkeypatch, decision):
     assert any(event[0] == "create_review" for event in events)
 
 
+@pytest.mark.parametrize("decision", ["hit", "later", "no_hit"])
+def test_prelocked_decision_reuses_loaded_context_without_nested_transaction(
+    monkeypatch, decision
+):
+    connection = FakeConnection()
+    events = configure_service(monkeypatch)
+
+    result = service.record_review_decision_in_transaction(
+        connection,
+        item=ReviewSessionItemRef("item-1", "variant-1"),
+        current=None,
+        decision=decision,
+        decided_by_user_ref="user-1",
+    )
+
+    assert result.decision == decision
+    assert not any(event[0] in {"get_item", "get_current"} for event in events)
+    assert connection.transaction_events == []
+
+
 def test_invalid_decision_is_rejected():
     with pytest.raises(ValueError, match="decision must"):
         service.record_review_decision(

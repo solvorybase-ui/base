@@ -199,10 +199,11 @@ def test_fully_decided_sessions_are_deterministic():
 
 
 def test_item_lock_uses_database_row_lock():
-    connection = QueueConnection(("item-1", "session-1"))
+    connection = QueueConnection(("item-1", "session-1", "variant-1"))
     locked = lock_open_review_item(connection, review_session_item_id="item-1")
     sql, params = connection.calls[0]
     assert "FOR UPDATE OF rsi" in sql
     assert "rsi.released_at IS NULL" in sql
     assert locked.review_session_id == "session-1"
+    assert locked.product_variant_id == "variant-1"
     assert params == ("item-1",)

@@ -58,6 +58,7 @@ class ReviewSessionProjection:
 class LockedReviewItem:
     review_session_item_id: str
     review_session_id: str
+    product_variant_id: str
 
 
 _SESSION_ITEMS_SQL = """
@@ -265,7 +266,7 @@ def lock_open_review_item(
     with connection.cursor() as cursor:
         cursor.execute(
             """
-            SELECT rsi.id, rsi.review_session_id
+            SELECT rsi.id, rsi.review_session_id, rsi.product_variant_id
             FROM review_session_items rsi
             JOIN review_sessions rs ON rs.id = rsi.review_session_id
             WHERE rsi.id = %s
@@ -282,4 +283,5 @@ def lock_open_review_item(
     return LockedReviewItem(
         review_session_item_id=str(row[0]),
         review_session_id=str(row[1]),
+        product_variant_id=str(row[2]),
     )
