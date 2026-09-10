@@ -10,7 +10,7 @@ class Client:
 class Conn: pass
 VALID=lambda v,d='selected': {'variant_id':v,'decision':d,'reason':'reason','usefulness':'high','functional_distinction':'clear','functional_distinction_summary':'summary'}
 def setup(monkeypatch, candidates):
- monkeypatch.setattr(svc,'load_scout_candidates',lambda connection,limit=10:candidates)
+ monkeypatch.setattr(svc,'load_scout_candidates',lambda connection,limit=10,shop_id=None,source_id=None:candidates)
  ids=iter([f'r{i}' for i in range(99)]); events=[]
  monkeypatch.setattr(svc,'create_running_scout_result',lambda connection,**kw:(events.append(('start',kw)) or next(ids)))
  monkeypatch.setattr(svc,'finish_scout_success',lambda connection,**kw:events.append(('success',kw)))
@@ -31,11 +31,19 @@ def test_provider_failure_never_rejected_and_next_candidate_runs(monkeypatch):
  assert s.failed==1 and s.selected==1 and s.rejected==0; assert len(c.calls)==2; assert ev[1][1]['error_summary']=='RuntimeError'
 def test_limit_default_is_ten(monkeypatch):
  seen={}
- def fake_load(connection,limit=10):
+ def fake_load(connection,limit=10,shop_id=None,source_id=None):
   seen['limit']=limit
   return []
  monkeypatch.setattr(svc,'load_scout_candidates',fake_load)
  svc.run_product_scout(Conn(),client=Client([]),prompt_template='P',prompt_version_id='pv',model_name='m'); assert seen['limit']==10
+
+def test_candidate_filters_are_forwarded(monkeypatch):
+ seen={}
+ def fake_load(connection,**kwargs):
+  seen.update(kwargs); return []
+ monkeypatch.setattr(svc,'load_scout_candidates',fake_load)
+ svc.run_product_scout(Conn(),client=Client([]),prompt_template='P',prompt_version_id='pv',model_name='m',shop_id='shop',source_id='source')
+ assert seen == {'limit':10,'shop_id':'shop','source_id':'source'}
 
 def test_candidate_images_are_forwarded_to_client_with_maximum_three(monkeypatch):
  candidate=ScoutCandidate('v1','f',None,None,'a',None,None,image_urls=('u1','u2','u3','u4'))

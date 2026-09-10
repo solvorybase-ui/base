@@ -7,6 +7,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Sequence
+from uuid import UUID
 
 from .openai_client import MODEL_NAME, MissingOpenAIAPIKeyError, OpenAIResponsesScoutClient
 from .prompt_builder import load_prompt_template
@@ -43,6 +44,16 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         type=_limit_value,
         help="maximum number of product variants to scout (1-10)",
+    )
+    parser.add_argument(
+        "--shop-id",
+        type=UUID,
+        help="only scout product variants associated with this shop UUID",
+    )
+    parser.add_argument(
+        "--source-id",
+        type=UUID,
+        help="only scout product variants associated with this source UUID",
     )
     return parser
 
@@ -115,6 +126,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     prompt_version_id=prompt_version.id,
                     model_name=MODEL_NAME,
                     limit=1,
+                    shop_id=None if args.shop_id is None else str(args.shop_id),
+                    source_id=None if args.source_id is None else str(args.source_id),
                 )
 
                 if stats.candidates == 0:

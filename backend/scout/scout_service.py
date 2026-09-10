@@ -14,8 +14,10 @@ class ScoutRunStats:
     failed: int=0
     invalid_output: int=0
 
-def run_product_scout(connection, *, client, prompt_template: str, prompt_version_id: str, model_name: str, model_version: str | None = None, automation_run_id: str | None = None, limit: int = 10) -> ScoutRunStats:
-    candidates=load_scout_candidates(connection, limit=limit)
+def run_product_scout(connection, *, client, prompt_template: str, prompt_version_id: str, model_name: str, model_version: str | None = None, automation_run_id: str | None = None, limit: int = 10, shop_id: str | None = None, source_id: str | None = None) -> ScoutRunStats:
+    candidates=load_scout_candidates(
+        connection, limit=limit, shop_id=shop_id, source_id=source_id
+    )
     selected=rejected=failed=invalid=0
     for candidate in candidates:
         result_id=create_running_scout_result(connection, product_variant_id=candidate.variant_id, prompt_version_id=prompt_version_id, model_name=model_name, model_version=model_version, automation_run_id=automation_run_id)

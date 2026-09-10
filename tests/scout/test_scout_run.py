@@ -80,6 +80,19 @@ def test_limit_must_be_between_one_and_ten(capsys):
     assert runtime.main(["--limit", "11"]) == 2
 
 
+def test_invalid_filter_uuids_are_rejected_before_runtime_calls(monkeypatch, capsys):
+    called = False
+    def client():
+        nonlocal called
+        called = True
+        return FakeClient()
+    monkeypatch.setattr(runtime, "OpenAIResponsesScoutClient", client)
+    assert runtime.main(["--limit", "1", "--shop-id", "not-a-uuid"]) == 2
+    assert runtime.main(["--limit", "1", "--source-id", "not-a-uuid"]) == 2
+    assert called is False
+    assert "invalid UUID value" in capsys.readouterr().err
+
+
 def test_missing_database_url_is_clear_and_does_not_log_secret(monkeypatch, capsys):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "openai-secret")
@@ -118,9 +131,26 @@ def test_uses_active_prompt_repository_path_model_and_requested_limit(monkeypatc
     assert calls[0][1]["prompt_version_id"] == "prompt-version-id"
     assert calls[0][1]["model_name"] == "gpt-5.6-luna"
     assert calls[0][1]["limit"] == 1
+    assert calls[0][1]["shop_id"] is None
+    assert calls[0][1]["source_id"] is None
     assert captured["prompt_path"] == Path(runtime.__file__).resolve().parents[2] / "prompts/product_scout_v1.md"
     assert connection.commit_calls == 1
     assert "candidates=1 selected=1 rejected=0" in capsys.readouterr().out
+
+
+def test_forwards_optional_shop_and_source_filters(monkeypatch, tmp_path):
+    configure_runtime(monkeypatch, tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        runtime,
+        "run_product_scout",
+        lambda conn, **kwargs: calls.append(kwargs) or stats(candidates=0),
+    )
+    shop_id = "00000000-0000-0000-0000-000000000001"
+    source_id = "00000000-0000-0000-0000-000000000002"
+    assert runtime.main(["--limit", "1", "--shop-id", shop_id, "--source-id", source_id]) == 0
+    assert calls[0]["shop_id"] == shop_id
+    assert calls[0]["source_id"] == source_id
 
 
 def test_processes_at_most_requested_limit(monkeypatch, tmp_path):

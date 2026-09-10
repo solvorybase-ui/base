@@ -36,7 +36,13 @@ class ScoutCandidate:
     image_urls: tuple[str, ...] = ()
 
 
-def load_scout_candidates(connection: ConnectionLike, *, limit: int = 10) -> list[ScoutCandidate]:
+def load_scout_candidates(
+    connection: ConnectionLike,
+    *,
+    limit: int = 10,
+    shop_id: str | None = None,
+    source_id: str | None = None,
+) -> list[ScoutCandidate]:
     """Load active variants that do not yet have a successful Scout result."""
     if limit <= 0:
         raise ValueError("limit must be greater than zero")
@@ -77,10 +83,36 @@ def load_scout_candidates(connection: ConnectionLike, *, limit: int = 10) -> lis
                   WHERE sr.product_variant_id = pv.id
                     AND sr.technical_status = 'succeeded'
               )
+              AND (
+                  %s::uuid IS NULL
+                  OR EXISTS (
+                      SELECT 1
+                      FROM offers filter_offer
+                      WHERE filter_offer.product_variant_id = pv.id
+                        AND filter_offer.shop_id = %s::uuid
+                        AND filter_offer.is_active = true
+                        AND filter_offer.archived_at IS NULL
+                  )
+              )
+              AND (
+                  %s::uuid IS NULL
+                  OR EXISTS (
+                      SELECT 1
+                      FROM offers source_offer
+                      JOIN offer_source_records source_record
+                        ON source_record.offer_id = source_offer.id
+                      WHERE source_offer.product_variant_id = pv.id
+                        AND source_offer.is_active = true
+                        AND source_offer.archived_at IS NULL
+                        AND source_record.source_id = %s::uuid
+                        AND source_record.is_active = true
+                        AND source_record.archived_at IS NULL
+                  )
+              )
             ORDER BY pv.created_at, pv.id, img.external_url
             LIMIT %s
             """,
-            (limit * 3,),
+            (shop_id, shop_id, source_id, source_id, limit * 3),
         )
         rows = cursor.fetchall()
 
