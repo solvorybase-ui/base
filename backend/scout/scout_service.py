@@ -24,7 +24,7 @@ def run_product_scout(connection, *, client, prompt_template: str, prompt_versio
         prompt=build_scout_prompt(candidate, template=prompt_template)
         try:
             raw=client.evaluate(prompt=prompt, image_urls=candidate.image_urls[:3])
-            output=validate_scout_output(raw, expected_variant_id=candidate.variant_id)
+            output=validate_scout_output(raw)
         except ScoutOutputValidationError as exc:
             finish_scout_failure(connection, scout_result_id=result_id, technical_status="invalid_output", error_code="invalid_output", error_summary=str(exc))
             invalid += 1

@@ -16,7 +16,6 @@ MAX_IMAGE_INPUTS = 3
 SCOUT_OUTPUT_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
-        "variant_id": {"type": "string", "minLength": 1},
         "decision": {"type": "string", "enum": ["selected", "rejected"]},
         "reason": {"type": "string", "minLength": 1},
         "usefulness": {"type": "string", "enum": ["low", "medium", "high"]},
@@ -27,7 +26,6 @@ SCOUT_OUTPUT_JSON_SCHEMA: dict[str, Any] = {
         "functional_distinction_summary": {"type": "string", "minLength": 1},
     },
     "required": [
-        "variant_id",
         "decision",
         "reason",
         "usefulness",

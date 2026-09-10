@@ -15,7 +15,6 @@ from backend.scout.openai_client import (
 
 
 VALID = {
-    "variant_id": "v1",
     "decision": "selected",
     "reason": "Useful and functionally distinct.",
     "usefulness": "high",
@@ -57,6 +56,8 @@ def test_uses_approved_model_responses_api_and_strict_json_schema():
             "strict": True,
         }
     }
+    assert "variant_id" not in SCOUT_OUTPUT_JSON_SCHEMA["properties"]
+    assert "variant_id" not in SCOUT_OUTPUT_JSON_SCHEMA["required"]
 
 
 def test_sends_up_to_three_product_images_as_real_image_inputs():

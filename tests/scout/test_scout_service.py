@@ -8,7 +8,7 @@ class Client:
   if isinstance(x,Exception): raise x
   return x
 class Conn: pass
-VALID=lambda v,d='selected': {'variant_id':v,'decision':d,'reason':'reason','usefulness':'high','functional_distinction':'clear','functional_distinction_summary':'summary'}
+VALID=lambda d='selected': {'decision':d,'reason':'reason','usefulness':'high','functional_distinction':'clear','functional_distinction_summary':'summary'}
 def setup(monkeypatch, candidates):
  monkeypatch.setattr(svc,'load_scout_candidates',lambda connection,limit=10,shop_id=None,source_id=None:candidates)
  ids=iter([f'r{i}' for i in range(99)]); events=[]
@@ -18,7 +18,7 @@ def setup(monkeypatch, candidates):
  return events
 def test_one_call_per_variant_and_selected_rejected(monkeypatch):
  cs=[ScoutCandidate('v1','f',None,None,'a',None,None),ScoutCandidate('v2','f',None,None,'b',None,None)]
- ev=setup(monkeypatch,cs); client=Client([VALID('v1'),VALID('v2','rejected')])
+ ev=setup(monkeypatch,cs); client=Client([VALID(),VALID('rejected')])
  s=svc.run_product_scout(Conn(),client=client,prompt_template='P',prompt_version_id='pv',model_name='model')
  assert len(client.calls)==2; assert (s.selected,s.rejected)==(1,1); assert len([e for e in ev if e[0]=='success'])==2
 def test_invalid_output_never_rejected(monkeypatch):
@@ -27,7 +27,7 @@ def test_invalid_output_never_rejected(monkeypatch):
  assert s.invalid_output==1 and s.rejected==0; assert ev[-1][0]=='failure'; assert ev[-1][1]['technical_status']=='invalid_output'
 def test_provider_failure_never_rejected_and_next_candidate_runs(monkeypatch):
  ev=setup(monkeypatch,[ScoutCandidate('v1','f',None,None,'a',None,None),ScoutCandidate('v2','f',None,None,'b',None,None)])
- c=Client([RuntimeError('secret connection text'),VALID('v2')]); s=svc.run_product_scout(Conn(),client=c,prompt_template='P',prompt_version_id='pv',model_name='m')
+ c=Client([RuntimeError('secret connection text'),VALID()]); s=svc.run_product_scout(Conn(),client=c,prompt_template='P',prompt_version_id='pv',model_name='m')
  assert s.failed==1 and s.selected==1 and s.rejected==0; assert len(c.calls)==2; assert ev[1][1]['error_summary']=='RuntimeError'
 def test_limit_default_is_ten(monkeypatch):
  seen={}
@@ -47,6 +47,16 @@ def test_candidate_filters_are_forwarded(monkeypatch):
 
 def test_candidate_images_are_forwarded_to_client_with_maximum_three(monkeypatch):
  candidate=ScoutCandidate('v1','f',None,None,'a',None,None,image_urls=('u1','u2','u3','u4'))
- setup(monkeypatch,[candidate]); client=Client([VALID('v1')])
+ setup(monkeypatch,[candidate]); client=Client([VALID()])
  svc.run_product_scout(Conn(),client=client,prompt_template='P',prompt_version_id='pv',model_name='m')
  assert client.calls[0][1] == ('u1','u2','u3')
+
+def test_results_for_consecutive_candidates_use_server_side_candidate_identity(monkeypatch):
+ candidates=[ScoutCandidate('v1','f',None,None,'a',None,None),ScoutCandidate('v2','f',None,None,'b',None,None)]
+ events=setup(monkeypatch,candidates)
+ stats=svc.run_product_scout(Conn(),client=Client([VALID(),VALID('rejected')]),prompt_template='P',prompt_version_id='pv',model_name='m')
+ starts=[event[1] for event in events if event[0]=='start']
+ successes=[event[1] for event in events if event[0]=='success']
+ assert [start['product_variant_id'] for start in starts] == ['v1','v2']
+ assert [success['scout_result_id'] for success in successes] == ['r0','r1']
+ assert (stats.selected,stats.rejected)==(1,1)
